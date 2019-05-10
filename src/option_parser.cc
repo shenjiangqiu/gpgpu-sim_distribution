@@ -100,7 +100,7 @@ public:
       }
       try {
          ss >> m_variable;
-      } catch (stringstream::failure &e) {
+      } catch (std::exception &e) {
          return false;
       }
       m_isParsed = true; 
@@ -170,7 +170,7 @@ bool OptionRegistry<bool>::fromString(const string str)
    ss.exceptions(stringstream::failbit | stringstream::badbit);
    try {
       ss >> value;
-   } catch (stringstream::failure &ep) {
+   } catch (std::exception &ep) {
       parsed = false;
    }
    assert(value == 0 or value == 1); // sanity check for boolean options (it can only be 1 or 0)
