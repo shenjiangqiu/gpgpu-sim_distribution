@@ -315,8 +315,8 @@ void shader_core_config::reg_options(class OptionParser * opp)
     option_parser_register(opp, "-gpgpu_shmem_size", OPT_UINT32, &gpgpu_shmem_size,
                  "Size of shared memory per shader core (default 16kB)",
                  "16384");
-    option_parser_register(opp, "-adpative_volta_cache_config", OPT_BOOL, &adpative_volta_cache_config,
-                 "adpative_volta_cache_config",
+    option_parser_register(opp, "-adaptive_volta_cache_config", OPT_BOOL, &adaptive_volta_cache_config,
+                 "adaptive_volta_cache_config",
                  "0");
     option_parser_register(opp, "-gpgpu_shmem_size", OPT_UINT32, &gpgpu_shmem_sizeDefault,
                  "Size of shared memory per shader core (default 16kB)",
@@ -499,6 +499,12 @@ void gpgpu_sim_config::reg_options(option_parser_t opp)
    option_parser_register(opp, "-liveness_message_freq", OPT_INT64, &liveness_message_freq, 
                "Minimum number of seconds between simulation liveness messages (0 = always print)",
                "1");
+   option_parser_register(opp, "-gpgpu_compute_capability_major", OPT_UINT32, &gpgpu_compute_capability_major,
+                 "Major compute capability version number",
+                 "7");
+   option_parser_register(opp, "-gpgpu_compute_capability_minor", OPT_UINT32, &gpgpu_compute_capability_minor,
+                 "Minor compute capability version number",
+                 "0");
    option_parser_register(opp, "-gpgpu_flush_l1_cache", OPT_BOOL, &gpgpu_flush_l1_cache,
                 "Flush L1 cache at the end of each kernel call",
                 "0");
@@ -532,6 +538,14 @@ void gpgpu_sim_config::reg_options(option_parser_t opp)
    option_parser_register(opp, "-visualizer_zlevel", OPT_INT32,
                           &g_visualizer_zlevel, "Compression level of the visualizer output log (0=no comp, 9=highest)",
                           "6");
+   option_parser_register(opp, "-gpgpu_stack_size_limit", OPT_INT32, &stack_size_limit,
+                          "GPU thread stack size", "1024" );
+   option_parser_register(opp, "-gpgpu_heap_size_limit", OPT_INT32, &heap_size_limit,
+                          "GPU malloc heap size ", "8388608" );
+   option_parser_register(opp, "-gpgpu_runtime_sync_depth_limit", OPT_INT32, &runtime_sync_depth_limit,
+                          "GPU device runtime synchronize depth", "2" );
+   option_parser_register(opp, "-gpgpu_runtime_pending_launch_count_limit", OPT_INT32, &runtime_pending_launch_count_limit,
+                          "GPU device runtime pending launch count", "2048" );
     option_parser_register(opp, "-trace_enabled", OPT_BOOL, 
                           &Trace::enabled, "Turn on traces",
                           "0");
@@ -792,6 +806,16 @@ int gpgpu_sim::shader_clock() const
 void gpgpu_sim::set_prop( cudaDeviceProp *prop )
 {
    m_cuda_properties = prop;
+}
+
+int gpgpu_sim::compute_capability_major() const
+{
+   return m_config.gpgpu_compute_capability_major;
+}
+
+int gpgpu_sim::compute_capability_minor() const
+{
+   return m_config.gpgpu_compute_capability_minor;
 }
 
 const struct cudaDeviceProp *gpgpu_sim::get_prop() const
