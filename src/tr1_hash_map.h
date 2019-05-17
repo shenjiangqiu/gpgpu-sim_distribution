@@ -27,9 +27,9 @@
 
 #pragma once 
 
-// detection and fallback for unordered_map in C++0x
+// detection and fallback for unordered_map in c++11
 #ifdef __cplusplus
-   // detect GCC 4.3 or later and use unordered map (part of C++0x)
+   // detect GCC 4.3 or later and use unordered map (part of c++11)
    // unordered map doesn't play nice with _GLIBCXX_DEBUG, just use a map if its enabled.
    #if  defined( __GNUC__ ) and not defined( _GLIBCXX_DEBUG )
        #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 3
