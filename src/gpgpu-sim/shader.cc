@@ -46,7 +46,7 @@
 #include <limits.h>
 #include "traffic_breakdown.h"
 #include "shader_trace.h"
-
+#include<exception>
 #define PRIORITIZE_MSHR_OVER_WB 1
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -1600,7 +1600,11 @@ ldst_unit::process_cache_access( cache_t* cache,
     }
     if ( status == HIT ) {
         assert( !read_sent );
+        if(cache->get_type()==666){//if it is l1 cache, we only need to pop tlb response queue
+            m_l1_tlb->pop_response();
+        }else{
         inst.accessq_pop_back();
+        }
         if ( inst.is_load() ) {
             for ( unsigned r=0; r < MAX_OUTPUT_VALUES; r++)
                 if (inst.out[r] > 0)
@@ -1612,11 +1616,21 @@ ldst_unit::process_cache_access( cache_t* cache,
         result = BK_CONF;
         assert( !read_sent );
         assert( !write_sent );
-        delete mf;
-    } else {
-        assert( status == MISS || status == HIT_RESERVED );
+        if(cache->get_type()!=666)//if it is l1 data cache, don't delete mf, because it's from tlb queue
+            delete mf;
+    }
+    else
+    {
+        assert(status == MISS || status == HIT_RESERVED);
         //inst.clear_active( access.get_warp_mask() ); // threads in mf writeback when mf returns
-        inst.accessq_pop_back();
+        if (cache->get_type() == 666)
+        {
+            m_l1_tlb->pop_response();
+        }
+        else
+        {
+            inst.accessq_pop_back();
+        }
     }
     if( !inst.accessq_empty() && result == NO_RC_FAIL)
         result = COAL_STALL;
@@ -1639,13 +1653,14 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue( cache_t *cache, war
     return process_cache_access( cache, mf->get_addr(), inst, events, mf, status );
 }
 
-mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache( l1_cache *cache, warp_inst_t &inst )
+void ldst_unit::process_memory_access_queue_l1cache( l1_cache* cache, mem_fetch *mf )
 {
     mem_stage_stall_type result = NO_RC_FAIL;
-    if( inst.accessq_empty() )
-        return result;
+    auto inst=mf->get_inst();
+    //if( inst.accessq_empty() )
+    //    return result;
 
-    mem_fetch *mf = m_mf_allocator->alloc(inst,inst.accessq_back());
+    //mem_fetch *mf = m_mf_allocator->alloc(inst,inst.accessq_back());
 
     if(m_config->m_L1D_config.l1_latency > 0)
 	{
@@ -1661,22 +1676,22 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache( l1_cache *c
 					m_core->inc_store_req( inst.warp_id() );
 			}
 
-    		inst.accessq_pop_back();
+    		m_l1_tlb->pop_response();
     	}
     	else
         {
         	result = BK_CONF;
-        	delete mf;
+        	//delete mf;
         }
-        if( !inst.accessq_empty() &&  result !=BK_CONF)
-		   result = COAL_STALL;
-	   return result;
+        //if( !inst.accessq_empty() &&  result !=BK_CONF)
+		//   result = COAL_STALL;
+	   return ;
 	}
     else
     {
 		std::list<cache_event> events;
 		enum cache_request_status status = cache->access(mf->get_addr(),mf,gpu_sim_cycle+gpu_tot_sim_cycle,events);
-		return process_cache_access( cache, mf->get_addr(), inst, events, mf, status );
+		process_cache_access( cache, mf->get_addr(), inst, events, mf, status );
     }
 }
 
@@ -1775,19 +1790,19 @@ bool ldst_unit::texture_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail,
    return inst.accessq_empty(); //done if empty.
 }
 
-bool ldst_unit::memory_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_reason, mem_stage_access_type &access_type )
+bool ldst_unit::memory_cycle(  mem_stage_stall_type &stall_reason, mem_stage_access_type &access_type )
 {
-   if( inst.empty() || 
-       ((inst.space.get_type() != global_space) &&
-        (inst.space.get_type() != local_space) &&
-        (inst.space.get_type() != param_space_local)) ) 
-       return true;
-   if( inst.active_count() == 0 ) 
-       return true;
-   assert( !inst.accessq_empty() );
-   mem_stage_stall_type stall_cond = NO_RC_FAIL;
-   const mem_access_t &access = inst.accessq_back();
+    if(m_l1_tlb->reponse_empty()){
+        return true;
+    }
+    auto mf=m_l1_tlb->get_top_response();
+    auto inst=mf->get_inst();
 
+    auto access_size=mf->get_access_size();
+
+   mem_stage_stall_type stall_cond = NO_RC_FAIL;
+   
+   //const mem_access_t &access = inst.accessq_back();
    bool bypassL1D = false; 
    if ( CACHE_GLOBAL == inst.cache_op || (m_L1D == NULL) ) {
        bypassL1D = true; 
@@ -1799,14 +1814,15 @@ bool ldst_unit::memory_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_rea
    if( bypassL1D ) {
        // bypass L1 cache
        unsigned control_size = inst.is_store() ? WRITE_PACKET_SIZE : READ_PACKET_SIZE;
-       unsigned size = access.get_size() + control_size;
+       unsigned size = access_size + control_size;
        //printf("Interconnect:Addr: %x, size=%d\n",access.get_addr(),size);
        if( m_icnt->full(size, inst.is_store() || inst.isatomic()) ) {
            stall_cond = ICNT_RC_FAIL;
        } else {
-           mem_fetch *mf = m_mf_allocator->alloc(inst,access);
+           //mem_fetch *mf = m_mf_allocator->alloc(inst,access); no need 
            m_icnt->push(mf);
-           inst.accessq_pop_back();
+           //inst.accessq_pop_back();
+           m_l1_tlb->pop_response();
            //inst.clear_active( access.get_warp_mask() );
            if( inst.is_load() ) { 
               for( unsigned r=0; r < MAX_OUTPUT_VALUES; r++) 
@@ -1815,21 +1831,21 @@ bool ldst_unit::memory_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_rea
            } else if( inst.is_store() ) 
               m_core->inc_store_req( inst.warp_id() );
        }
-   } else {
+   } else {//not bypassing 
        assert( CACHE_UNDEFINED != inst.cache_op );
-       stall_cond = process_memory_access_queue_l1cache(m_L1D,inst);
+       process_memory_access_queue_l1cache(m_L1D,mf);
    }
    if( !inst.accessq_empty() && stall_cond == NO_RC_FAIL)
        stall_cond = COAL_STALL;
    if (stall_cond != NO_RC_FAIL) {
-      stall_reason = stall_cond;
+      //stall_reason = stall_cond;
       bool iswrite = inst.is_store();
       if (inst.space.is_local()) 
          access_type = (iswrite)?L_MEM_ST:L_MEM_LD;
       else 
          access_type = (iswrite)?G_MEM_ST:G_MEM_LD;
    }
-   return inst.accessq_empty(); 
+   return stall_reason; 
 }
 
 
@@ -2076,7 +2092,9 @@ ldst_unit::ldst_unit( mem_fetch_interface *icnt,
                       const memory_config *mem_config,  
                       shader_core_stats *stats,
                       unsigned sid,
-                      unsigned tpc ) : pipelined_simd_unit(NULL,config,config->smem_latency,core), m_next_wb(config)
+                      unsigned tpc ) : pipelined_simd_unit(NULL,config,config->smem_latency,core), 
+                      m_next_wb(config),
+                      m_l1_tlb(new l1_tlb(config->m_L1TLB_config,std::unique_ptr<page_manager>(new page_manager())))
 {
 	assert(config->smem_latency > 1);
     init( icnt,
@@ -2282,52 +2300,147 @@ void ldst_unit::issue( register_set &reg_set )
    pipelined_simd_unit::issue(reg_set);
 }
 */
+
+/*
+tlb_cycle
+read from pipeline
+generate mf
+access l1 tlb
+*/
+bool ldst_unit::tlb_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_reason, mem_stage_access_type &access_type){
+    if( inst.empty() || 
+       ((inst.space.get_type() != global_space) &&
+        (inst.space.get_type() != local_space) &&
+        (inst.space.get_type() != param_space_local)) ) 
+       return true;
+   if( inst.active_count() == 0 ) 
+       return true;
+   assert( !inst.accessq_empty() );
+   mem_stage_stall_type stall_cond = NO_RC_FAIL;
+   const mem_access_t &access = inst.accessq_back();
+
+   mem_fetch *mf = m_mf_allocator->alloc(inst, inst.accessq_back());
+   auto result = m_l1_tlb->access(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+   switch (result)
+   {
+   case tlb_result::hit:
+        inst.accessq_pop_back();
+        if(inst.accessq_empty()){
+            return true;
+        }else{
+            stall_reason= COAL_STALL;
+            return false;
+        }
+       break;
+
+   case tlb_result::hit_reserved:
+        inst.accessq_pop_back();
+        if(inst.accessq_empty()){
+            return true;
+        }else{
+            stall_reason= COAL_STALL;
+            return false;
+        }
+
+       break;
+   case tlb_result::miss:
+        inst.accessq_pop_back();
+        if(inst.accessq_empty()){
+            return true;
+        }else{
+            stall_reason= COAL_STALL;
+            return false;
+        }
+       break;
+   case tlb_result::resfail:
+        //at this case, do not pop access from inst, we did nothing for that, remember to delete mf
+        delete mf;
+        stall_reason =BK_CONF;
+        return false;
+       break;
+   default:
+       throw "error";
+       break;
+   }
+}
+
 void ldst_unit::cycle()
 {
-   writeback();
+   writeback();//write ready asscess to shader core
    m_operand_collector->step();
    for( unsigned stage=0; (stage+1)<m_pipeline_depth; stage++ ) 
        if( m_pipeline_reg[stage]->empty() && !m_pipeline_reg[stage+1]->empty() )
             move_warp(m_pipeline_reg[stage], m_pipeline_reg[stage+1]);
 
-   if( !m_response_fifo.empty() ) {
+   if (!m_response_fifo.empty())
+   {
        mem_fetch *mf = m_response_fifo.front();
-       if (mf->get_access_type() == TEXTURE_ACC_R) {
-           if (m_L1T->fill_port_free()) {
-               m_L1T->fill(mf,gpu_sim_cycle+gpu_tot_sim_cycle);
-               m_response_fifo.pop_front(); 
-           }
-       } else if (mf->get_access_type() == CONST_ACC_R)  {
-           if (m_L1C->fill_port_free()) {
-               mf->set_status(IN_SHADER_FETCHED,gpu_sim_cycle+gpu_tot_sim_cycle);
-               m_L1C->fill(mf,gpu_sim_cycle+gpu_tot_sim_cycle);
-               m_response_fifo.pop_front(); 
-           }
-       } else {
-    	   if( mf->get_type() == WRITE_ACK || ( m_config->gpgpu_perfect_mem && mf->get_is_write() )) {
-               m_core->store_ack(mf);
-               m_response_fifo.pop_front();
-               delete mf;
-           } else {
-               assert( !mf->get_is_write() ); // L1 cache is write evict, allocate line on load miss only
+       assert(m_l1_tlb);
+       assert(mf);
+       if (m_l1_tlb->is_outgoing(mf))//this is a tlb_resquest
+       {
+           m_l1_tlb->del_outgoing(mf);
+           //mf will fill the l1 tlb cache, and return to tlb_response queue;
+           m_l1_tlb->fill(mf,gpu_sim_cycle + gpu_tot_sim_cycle);//mark mshr, set cache line
+       }
+       else
+       {
 
-               bool bypassL1D = false; 
-               if ( CACHE_GLOBAL == mf->get_inst().cache_op || (m_L1D == NULL) ) {
-                   bypassL1D = true; 
-               } else if (mf->get_access_type() == GLOBAL_ACC_R || mf->get_access_type() == GLOBAL_ACC_W) { // global memory access 
-                   if (m_core->get_config()->gmem_skip_L1D)
-                       bypassL1D = true; 
+           if (mf->get_access_type() == TEXTURE_ACC_R)
+           {
+               if (m_L1T->fill_port_free())
+               {
+                   m_L1T->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+                   m_response_fifo.pop_front();
                }
-               if( bypassL1D ) {
-                   if ( m_next_global == NULL ) {
-                       mf->set_status(IN_SHADER_FETCHED,gpu_sim_cycle+gpu_tot_sim_cycle);
-                       m_response_fifo.pop_front();
-                       m_next_global = mf;
+           }
+           else if (mf->get_access_type() == CONST_ACC_R)
+           {
+               if (m_L1C->fill_port_free())
+               {
+                   mf->set_status(IN_SHADER_FETCHED, gpu_sim_cycle + gpu_tot_sim_cycle);
+                   m_L1C->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+                   m_response_fifo.pop_front();
+               }
+           }
+           else
+           {
+               if (mf->get_type() == WRITE_ACK || (m_config->gpgpu_perfect_mem && mf->get_is_write()))
+               {
+                   m_core->store_ack(mf);
+                   m_response_fifo.pop_front();
+                   delete mf;
+               }
+               else
+               {
+                   assert(!mf->get_is_write()); // L1 cache is write evict, allocate line on load miss only
+
+                   bool bypassL1D = false;
+                   if (CACHE_GLOBAL == mf->get_inst().cache_op || (m_L1D == NULL))
+                   {
+                       bypassL1D = true;
                    }
-               } else {
-                   if (m_L1D->fill_port_free()) {
-                       m_L1D->fill(mf,gpu_sim_cycle+gpu_tot_sim_cycle);
-                       m_response_fifo.pop_front();
+                   else if (mf->get_access_type() == GLOBAL_ACC_R || mf->get_access_type() == GLOBAL_ACC_W)
+                   { // global memory access
+                       if (m_core->get_config()->gmem_skip_L1D)
+                           bypassL1D = true;
+                   }
+                   if (bypassL1D)
+                   {
+                       if (m_next_global == NULL)
+                       {
+                           mf->set_status(IN_SHADER_FETCHED, gpu_sim_cycle + gpu_tot_sim_cycle);
+                           m_response_fifo.pop_front();
+                           m_next_global = mf;
+                       }
+                   }
+                   else
+                   {
+                       if (m_L1D->fill_port_free())
+                       {
+                           m_L1D->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+                           m_response_fifo.pop_front();
+                       }
                    }
                }
            }
@@ -2337,10 +2450,11 @@ void ldst_unit::cycle()
    m_L1T->cycle();
    m_L1C->cycle();
    if( m_L1D ) {
-	   m_L1D->cycle();
+	   m_L1D->cycle();/// Sends next request to lower level of memory
 	   if(m_config->m_L1D_config.l1_latency > 0)
 	   		L1_latency_queue_cycle();
    }
+   m_l1_tlb->cycle();//send to l2 tlb, and put ready access to response queue;
 
    warp_inst_t &pipe_reg = *m_dispatch_reg;
    enum mem_stage_stall_type rc_fail = NO_RC_FAIL;
@@ -2349,7 +2463,8 @@ void ldst_unit::cycle()
    done &= shared_cycle(pipe_reg, rc_fail, type);
    done &= constant_cycle(pipe_reg, rc_fail, type);
    done &= texture_cycle(pipe_reg, rc_fail, type);
-   done &= memory_cycle(pipe_reg, rc_fail, type);
+   done &= tlb_cycle(pipe_reg, rc_fail, type);//read from pipline , send to tlb.
+   done &= memory_cycle( rc_fail, type);//read from tlb response queue, do regular preocess
    m_mem_rc = rc_fail;
 
    if (!done) { // log stall types and return

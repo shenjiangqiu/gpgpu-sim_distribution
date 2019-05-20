@@ -1012,6 +1012,7 @@ public:
     // accessors for cache bandwidth availability 
     virtual bool data_port_free() const = 0; 
     virtual bool fill_port_free() const = 0; 
+    virtual int get_type() const =0;
 };
 
 bool was_write_sent( const std::list<cache_event> &events );
@@ -1023,6 +1024,9 @@ bool was_writeallocate_sent( const std::list<cache_event> &events );
 /// Each subclass implements its own 'access' function
 class baseline_cache : public cache_t {
 public:
+    virtual int get_type() const override{
+        return 0;
+    }
     baseline_cache( const char *name, cache_config &config, int core_id, int type_id, mem_fetch_interface *memport,
                      enum mem_fetch_status status )
     : m_config(config), m_tag_array(new tag_array(config,core_id,type_id)), 
@@ -1439,6 +1443,9 @@ protected:
 /// (the policy used in fermi according to the CUDA manual)
 class l1_cache : public data_cache {
 public:
+    virtual int get_type() const override{
+        return 666;
+    }
     l1_cache(const char *name, cache_config &config,
             int core_id, int type_id, mem_fetch_interface *memport,
             mem_fetch_allocator *mfcreator, enum mem_fetch_status status )
@@ -1494,6 +1501,9 @@ public:
 // http://www-graphics.stanford.edu/papers/texture_prefetch/
 class tex_cache : public cache_t {
 public:
+    int get_type() const override{
+        return 1;
+    }
     tex_cache( const char *name, cache_config &config, int core_id, int type_id, mem_fetch_interface *memport,
                enum mem_fetch_status request_status, 
                enum mem_fetch_status rob_status )

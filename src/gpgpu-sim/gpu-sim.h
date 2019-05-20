@@ -38,7 +38,7 @@
 #include <list>
 #include <stdio.h>
 
-
+#include"l2_tlb.hpp"
 
 // constants for statistics printouts
 #define GPU_RSTAT_SHD_INFO 0x1
@@ -310,6 +310,9 @@ public:
         m_shader_config.init();
         ptx_set_tex_cache_linesize(m_shader_config.m_L1T_config.get_line_sz());
         m_memory_config.init();
+        m_l2_tlb_config.init();
+        m_shader_config.m_L1TLB_config.m_icnt_index=m_shader_config.n_simt_clusters+m_memory_config.m_n_mem_sub_partition;//need TODO
+        m_l2_tlb_config.set_icnt_index(m_shader_config.m_L1TLB_config.m_icnt_index);
         init_clock_domains(); 
         power_config::init();
         Trace::init();
@@ -349,6 +352,7 @@ private:
     bool m_valid;
     shader_core_config m_shader_config;
     memory_config m_memory_config;
+    l2_tlb_config m_l2_tlb_config;
     // clock domains - frequency
     double core_freq;
     double icnt_freq;
@@ -560,6 +564,8 @@ private:
 
 
 public:
+    std::shared_ptr<page_manager> m_page_manager;
+    l2_tlb m_l2_tlb;
    unsigned long long  gpu_sim_insn;
    unsigned long long  gpu_tot_sim_insn;
    unsigned long long  gpu_sim_insn_last_update;

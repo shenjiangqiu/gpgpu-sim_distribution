@@ -231,6 +231,7 @@ void memory_config::reg_options(class OptionParser * opp)
 
 void shader_core_config::reg_options(class OptionParser * opp)
 {
+   m_L1TLB_config.parse_option(opp);
     option_parser_register(opp, "-gpgpu_simd_model", OPT_INT32, &model, 
                    "1 = post-dominator", "1");
     option_parser_register(opp, "-gpgpu_shader_core_pipeline", OPT_CSTR, &gpgpu_shader_core_pipeline_opt, 
@@ -483,6 +484,8 @@ void gpgpu_sim_config::reg_options(option_parser_t opp)
     gpgpu_functional_sim_config::reg_options(opp);
     m_shader_config.reg_options(opp);
     m_memory_config.reg_options(opp);
+    m_l2_tlb_config.reg_option(opp);
+
     power_config::reg_options(opp);
    option_parser_register(opp, "-gpgpu_max_cycle", OPT_INT32, &gpu_max_cycle_opt, 
                "terminates gpu simulation early (0 = no limit)",
@@ -716,7 +719,7 @@ void gpgpu_sim::stop_all_running_kernels(){
 void set_ptx_warp_size(const struct core_config * warp_size);
 
 gpgpu_sim::gpgpu_sim( const gpgpu_sim_config &config ) 
-    : gpgpu_t(config), m_config(config)
+    : gpgpu_t(config), m_config(config),m_page_manager(std::make_shared<page_manager>()),m_l2_tlb(config.m_l2_tlb_config,m_page_manager)
 { 
     m_shader_config = &m_config.m_shader_config;
     m_memory_config = &m_config.m_memory_config;
@@ -1561,6 +1564,7 @@ void gpgpu_sim::cycle()
    int clock_mask = next_clock_domain();
 
    if (clock_mask & CORE ) {
+      m_l2_tlb.cycle();
        // shader core loading (pop from ICNT into core) follows CORE clock
       for (unsigned i=0;i<m_shader_config->n_simt_clusters;i++) 
          m_cluster[i]->icnt_cycle(); 

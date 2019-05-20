@@ -28,7 +28,7 @@
 
 #ifndef SHADER_H
 #define SHADER_H
-
+#include"l1_tlb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -1292,8 +1292,8 @@ protected:
    bool shared_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
    bool constant_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
    bool texture_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
-   bool memory_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
-
+   bool memory_cycle(  mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
+    bool tlb_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
    virtual mem_stage_stall_type process_cache_access( cache_t* cache,
                                                       new_addr_type address,
                                                       warp_inst_t &inst,
@@ -1301,7 +1301,7 @@ protected:
                                                       mem_fetch *mf,
                                                       enum cache_request_status status );
    mem_stage_stall_type process_memory_access_queue( cache_t *cache, warp_inst_t &inst );
-   mem_stage_stall_type process_memory_access_queue_l1cache( l1_cache *cache, warp_inst_t &inst );
+   void process_memory_access_queue_l1cache( l1_cache *cache, mem_fetch* mf );
 
    const memory_config *m_memory_config;
    class mem_fetch_interface *m_icnt;
@@ -1333,6 +1333,8 @@ protected:
 
    std::deque<mem_fetch* > l1_latency_queue;
    void L1_latency_queue_cycle();
+    std::unique_ptr<l1_tlb> m_l1_tlb;
+   
 };
 
 enum pipeline_stage_name_t {
@@ -1377,51 +1379,55 @@ struct shader_core_config : public core_config
 
     void init()
     {
-        int ntok = sscanf(gpgpu_shader_core_pipeline_opt,"%d:%d", 
+        int ntok = sscanf(gpgpu_shader_core_pipeline_opt, "%d:%d",
                           &n_thread_per_shader,
                           &warp_size);
-        if(ntok != 2) {
-           printf("GPGPU-Sim uArch: error while parsing configuration string gpgpu_shader_core_pipeline_opt\n");
-           abort();
-	}
+        if (ntok != 2)
+        {
+            printf("GPGPU-Sim uArch: error while parsing configuration string gpgpu_shader_core_pipeline_opt\n");
+            abort();
+        }
 
-	char* toks = new char[100];
-	char* tokd = toks;
-	strcpy(toks,pipeline_widths_string);
-                                  
-	toks = strtok(toks,",");
+        char *toks = new char[100];
+        char *tokd = toks;
+        strcpy(toks, pipeline_widths_string);
 
-	/*	Removing the tensorcore pipeline while reading the config files if the tensor core is not available.
+        toks = strtok(toks, ",");
+
+        /*	Removing the tensorcore pipeline while reading the config files if the tensor core is not available.
 	 	If we won't remove it, old regression will be broken.
 		So to support the legacy config files it's best to handle in this way.
-         */  
-	int num_config_to_read=N_PIPELINE_STAGES-2*(!gpgpu_tensor_core_avail);
+         */
+        int num_config_to_read = N_PIPELINE_STAGES - 2 * (!gpgpu_tensor_core_avail);
 
-        for (unsigned i = 0; i <num_config_to_read; i++) { 
-	    assert(toks);
-	    ntok = sscanf(toks,"%d", &pipe_widths[i]);
-	    assert(ntok == 1); 
-	    toks = strtok(NULL,",");
-	}
-
-	delete[] tokd;
-	
-        if (n_thread_per_shader > MAX_THREAD_PER_SM) {
-           printf("GPGPU-Sim uArch: Error ** increase MAX_THREAD_PER_SM in abstract_hardware_model.h from %u to %u\n", 
-                  MAX_THREAD_PER_SM, n_thread_per_shader);
-           abort();
+        for (unsigned i = 0; i < num_config_to_read; i++)
+        {
+            assert(toks);
+            ntok = sscanf(toks, "%d", &pipe_widths[i]);
+            assert(ntok == 1);
+            toks = strtok(NULL, ",");
         }
-        max_warps_per_shader =  n_thread_per_shader/warp_size;
-        assert( !(n_thread_per_shader % warp_size) );
+
+        delete[] tokd;
+
+        if (n_thread_per_shader > MAX_THREAD_PER_SM)
+        {
+            printf("GPGPU-Sim uArch: Error ** increase MAX_THREAD_PER_SM in abstract_hardware_model.h from %u to %u\n",
+                   MAX_THREAD_PER_SM, n_thread_per_shader);
+            abort();
+        }
+        max_warps_per_shader = n_thread_per_shader / warp_size;
+        assert(!(n_thread_per_shader % warp_size));
         max_sfu_latency = 512;
         max_sp_latency = 32;
-        
-	max_tensor_core_latency = 64;
-        
-	m_L1I_config.init(m_L1I_config.m_config_string,FuncCachePreferNone);
-        m_L1T_config.init(m_L1T_config.m_config_string,FuncCachePreferNone);
-        m_L1C_config.init(m_L1C_config.m_config_string,FuncCachePreferNone);
-        m_L1D_config.init(m_L1D_config.m_config_string,FuncCachePreferNone);
+
+        max_tensor_core_latency = 64;
+
+        m_L1I_config.init(m_L1I_config.m_config_string, FuncCachePreferNone);
+        m_L1T_config.init(m_L1T_config.m_config_string, FuncCachePreferNone);
+        m_L1C_config.init(m_L1C_config.m_config_string, FuncCachePreferNone);
+        m_L1D_config.init(m_L1D_config.m_config_string, FuncCachePreferNone);
+        m_L1TLB_config.init();
         gpgpu_cache_texl1_linesize = m_L1T_config.get_line_sz();
         gpgpu_cache_constl1_linesize = m_L1C_config.get_line_sz();
         m_valid = true;
@@ -1454,6 +1460,7 @@ struct shader_core_config : public core_config
     mutable cache_config m_L1T_config;
     mutable cache_config m_L1C_config;
     mutable l1d_cache_config m_L1D_config;
+    mutable l1_tlb_config m_L1TLB_config;
 
     bool gpgpu_dwf_reg_bankconflict;
 
