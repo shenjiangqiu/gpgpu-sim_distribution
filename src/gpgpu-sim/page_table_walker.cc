@@ -8,7 +8,7 @@ latency_queue::latency_queue(unsigned long long latency, unsigned size) : m_late
 
 bool latency_queue::add(mem_fetch* v, unsigned long long time)
 {
-    if (m_elements.size() >= m_size_limit)
+    if (m_elements.size() >= m_size_limit)//TODO what is size limit
     {
         return false;
     }
