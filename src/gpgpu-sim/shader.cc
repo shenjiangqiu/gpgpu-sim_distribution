@@ -1845,7 +1845,7 @@ bool ldst_unit::memory_cycle(  mem_stage_stall_type &stall_reason, mem_stage_acc
       else 
          access_type = (iswrite)?G_MEM_ST:G_MEM_LD;
    }
-   return stall_reason; 
+   return true; 
 }
 
 
@@ -2377,11 +2377,17 @@ void ldst_unit::cycle()
        mem_fetch *mf = m_response_fifo.front();
        assert(m_l1_tlb);
        assert(mf);
-       if (m_l1_tlb->is_outgoing(mf))//this is a tlb_resquest
+       if (m_l1_tlb->is_outgoing(mf)) //this is a tlb_resquest
        {
            m_l1_tlb->del_outgoing(mf);
            //mf will fill the l1 tlb cache, and return to tlb_response queue;
-           m_l1_tlb->fill(mf,gpu_sim_cycle + gpu_tot_sim_cycle);//mark mshr, set cache line
+           m_l1_tlb->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+           /*
+           fill() mark mshr, set cache line,
+           at this time we add mf to mshr ready queue,and at tlb::cycle(),
+            we add ready mf to response queue, so l1d cache can read from tlb response queue
+            */
+           mf->finished_tlb = true;
        }
        else
        {
@@ -4039,10 +4045,12 @@ void simt_core_cluster::icnt_cycle()
     }
     if( m_response_fifo.size() < m_config->n_simt_ejection_buffer_size ) {
         mem_fetch *mf = (mem_fetch*) ::icnt_pop(m_cluster_id);
-        if (!mf) 
+        if(!mf){
             return;
+        }
         assert(mf->get_tpc() == m_cluster_id);
-        assert(mf->get_type() == READ_REPLY || mf->get_type() == WRITE_ACK );
+        
+        assert(mf->finished_tlb==false|| mf->get_type() == READ_REPLY || mf->get_type() == WRITE_ACK );
 
         // The packet size varies depending on the type of request: 
         // - For read request and atomic request, the packet contains the data 

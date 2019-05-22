@@ -28,7 +28,7 @@ class l2_tlb_config{
     unsigned n_mshr_max_merge;
     unsigned response_queue_size;
     unsigned miss_queue_size;
-
+    unsigned recv_buffer_size;
     unsigned m_pw_size;
     unsigned m_pw_latency;
 };
@@ -51,8 +51,8 @@ class l2_tlb{
 
     
     protected:
-    std::unique_ptr<page_table_walker> m_page_table_walker;
     l2_tlb_config m_config;//init in constructor
+    std::unique_ptr<page_table_walker> m_page_table_walker;
     std::shared_ptr<page_manager> m_page_manager;//init in constructor
     
 	std::shared_ptr<mshr_table> m_mshrs;
@@ -60,8 +60,8 @@ class l2_tlb{
     std::deque<mem_fetch*> m_miss_queue;
     //enum mem_fetch_status m_miss_queue_status;
     std::deque<mem_fetch*>  m_response_queue;
-    std::unordered_set<mem_fetch*> outgoing_mf;
-
+    std::unordered_set<mem_fetch*> outgoing_mf;//we do not use multiple set
+    std::queue<mem_fetch*> m_recv_buffer;
 };
 
 #endif

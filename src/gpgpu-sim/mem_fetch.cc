@@ -41,7 +41,7 @@ mem_fetch::mem_fetch( const mem_access_t &access,
                       unsigned tpc, 
                       const struct memory_config *config,
 					  mem_fetch *m_original_mf,
-					  mem_fetch *m_original_wr_mf)
+					  mem_fetch *m_original_wr_mf):finished_tlb(false)
 
 {
    m_request_uid = sm_next_mf_request_uid++;

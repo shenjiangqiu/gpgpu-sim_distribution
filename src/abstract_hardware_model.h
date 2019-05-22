@@ -1024,7 +1024,7 @@ public:
 			printf("Printing mem access generated\n");
 			std::list<mem_access_t>::iterator it;	
 			for (it = m_accessq.begin(); it != m_accessq.end(); ++it){
-   				 printf("MEM_TXN_GEN:%s:%x, Size:%d \n",mem_access_type_str(it->get_type()), it->get_addr(),it->get_size());
+   				 printf("MEM_TXN_GEN:%s:%llx, Size:%d \n",mem_access_type_str(it->get_type()), it->get_addr(),it->get_size());
 			}	
 		}
     }   

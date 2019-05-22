@@ -1,6 +1,6 @@
 #ifndef PAGE_MANAGER_HPP
 #define PAGE_MANAGER_HPP
-using addr_type=long long;
+using addr_type=unsigned long long;
 class page_manager
 {
 private:
