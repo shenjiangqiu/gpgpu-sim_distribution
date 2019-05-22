@@ -49,6 +49,9 @@ enum mf_type {
 
 class mem_fetch {
 public:
+    #ifdef SJQDEBUG
+    static int m_nums;
+    #endif
     mem_fetch( const mem_access_t &access, 
                const warp_inst_t *inst,
                unsigned ctrl_size, 
@@ -60,6 +63,9 @@ public:
 			   mem_fetch *original_wr_mf = NULL);
    ~mem_fetch();
     bool finished_tlb;
+    #ifdef SJQDEBUG
+    unsigned icnt_from;
+    #endif
    void set_status( enum mem_fetch_status status, unsigned long long cycle );
    void set_reply() 
    { 
@@ -118,8 +124,8 @@ public:
 
    mem_fetch* get_original_mf() { return original_mf; }
    mem_fetch* get_original_wr_mf()  { return original_wr_mf; }
-
-private:
+    
+    private:
    // request source information
    unsigned m_request_uid;
    unsigned m_sid;

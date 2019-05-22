@@ -50,7 +50,19 @@
 #define PRIORITIZE_MSHR_OVER_WB 1
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
-    
+extern unsigned long long gpu_sim_cycle;
+extern unsigned long long gpu_tot_sim_cycle;
+#define SJQDEBUG
+#ifdef SJQDEBUG
+#define printdbg(...)                                                                                 \
+    do                                                                                                \
+    {                                                                                                 \
+        printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
+        printf(__VA_ARGS__);                                                                          \
+    } while (0)
+#elif
+#define printdbg(x)
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -2377,20 +2389,25 @@ void ldst_unit::cycle()
        mem_fetch *mf = m_response_fifo.front();
        assert(m_l1_tlb);
        assert(mf);
+       printdbg("access from icnt,mf:%llX\n",mf->get_addr());
        if (m_l1_tlb->is_outgoing(mf)) //this is a tlb_resquest
        {
+           printdbg("m_l1_tlb accept this mf:%llX\n",mf->get_addr());
            m_l1_tlb->del_outgoing(mf);
            //mf will fill the l1 tlb cache, and return to tlb_response queue;
            m_l1_tlb->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+
            /*
            fill() mark mshr, set cache line,
            at this time we add mf to mshr ready queue,and at tlb::cycle(),
             we add ready mf to response queue, so l1d cache can read from tlb response queue
             */
            mf->finished_tlb = true;
+           m_response_fifo.pop_front();
        }
        else
        {
+           printdbg("l1D access this mf:%llX\n",mf->get_addr());
 
            if (mf->get_access_type() == TEXTURE_ACC_R)
            {
@@ -4055,6 +4072,7 @@ void simt_core_cluster::icnt_cycle()
         // The packet size varies depending on the type of request: 
         // - For read request and atomic request, the packet contains the data 
         // - For write-ack, the packet only has control metadata
+    
         unsigned int packet_size = (mf->get_is_write())? mf->get_ctrl_size() : mf->size(); 
         m_stats->m_incoming_traffic_stats->record_traffic(mf, packet_size); 
         mf->set_status(IN_CLUSTER_TO_SHADER_QUEUE,gpu_sim_cycle+gpu_tot_sim_cycle);

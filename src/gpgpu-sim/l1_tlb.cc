@@ -102,7 +102,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         printdbg("l1 access mf:%llX\n", mf->get_addr());
         for (; start < end; start++)
         {
-            if ((*start)->is_valid_line())
+            if (!(*start)->is_invalid_line())//previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
             {
                 if ((*start)->get_last_access_time() < oldest_access_time)
                 {
@@ -123,7 +123,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                         }
                         else
                         {
-                            m_mshrs->add(block_addr, mf);
+                            m_mshrs->add<2>(block_addr, mf);//adding to existing entry
                             printdbg("l1 hit_reserved and push to mshr\n");
                             (*start)->set_last_access_time(time, mask);
                             return tlb_result::hit_reserved;
@@ -165,7 +165,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         auto next_line = has_free_line ? free_line : last_line;
         printdbg("miss and allocate, send to miss queue and mshr, mf:%llX\n", mf->get_addr());
         (*next_line)->allocate(tag, block_addr, time, mask);
-        m_mshrs->add(block_addr, mf);
+        m_mshrs->add<1>(block_addr, mf);//adding to new entry
         m_miss_queue.push_back(mf); //miss
         outgoing_mf.insert(mf);
         return tlb_result::miss;
@@ -187,10 +187,7 @@ void l1_tlb::cycle()
         auto size = mf->get_ctrl_size(); //read only need 8 bytes
         if (::icnt_has_buffer(mf->get_tpc(), size))
         {
-#ifdef SJQDEBUG
             printdbg("from miss queue to icnt,mftpc: %u;mf :%llX\n", mf->get_tpc(), mf->get_addr());
-
-#endif // SJQDEBUG
             ::icnt_push(mf->get_tpc(), m_config.m_icnt_index, mf, size);
             m_miss_queue.pop_front(); //successfully pushed to icnt
         }
@@ -212,6 +209,7 @@ void l1_tlb::fill(mem_fetch *mf, unsigned long long time)
     auto set_index = (v_addr >> m_page_size_log2) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
     auto tag = v_addr & (~static_cast<addr_type>(m_config.m_page_size - 1));           //only need the bits besides page offset
     auto block_addr = v_addr >> m_page_size_log2;
+    printdbg("l1 tlb fill, mf:%llX, core id:%u, blockaddr:%llX\n",mf->get_addr(),mf->get_sid(),block_addr);
     bool has_atomic;
     m_mshrs->mark_ready(block_addr, has_atomic);
     auto start = m_tag_arrays.begin() + set_index * n_assoc;

@@ -28,7 +28,26 @@
 #include "gpu-cache.h"
 #include "stat-tool.h"
 #include <assert.h>
+#define SJQDEBUG
 
+#ifdef SJQDEBUG
+#define setif(...) __VA_ARGS__
+#else
+#define setif(...) 
+#endif
+
+#ifdef SJQDEBUG
+extern unsigned long long gpu_sim_cycle;
+extern unsigned long long gpu_tot_sim_cycle;
+#define printdbg(...)                                                                                 \
+    do                                                                                                \
+    {                                                                                                 \
+        printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
+        printf(__VA_ARGS__);                                                                          \
+    } while (0)
+#elif
+#define printdbg(x)
+#endif
 // used to allocate memory that is large enough to adapt the changes in cache size across kernels
 
 const char * cache_request_status_str(enum cache_request_status status) 
@@ -532,15 +551,7 @@ bool mshr_table::full( new_addr_type block_addr ) const{
 }
 
 /// Add or merge this access
-void mshr_table::add( new_addr_type block_addr, mem_fetch *mf ){
-	m_data[block_addr].m_list.push_back(mf);
-	assert( m_data.size() <= m_num_entries );
-	assert( m_data[block_addr].m_list.size() <= m_max_merged );
-	// indicate that this MSHR entry contains an atomic operation
-	if ( mf->isatomic() ) {
-		m_data[block_addr].m_has_atomic = true;
-	}
-}
+
 
 /// check is_read_after_write_pending
 bool mshr_table::is_read_after_write_pending( new_addr_type block_addr){
@@ -955,6 +966,7 @@ void baseline_cache::cycle(){
 void baseline_cache::fill(mem_fetch *mf, unsigned time){
 
 	if(m_config.m_mshr_type == SECTOR_ASSOC) {
+        printdbg("mf:%llX\n",mf->get_addr());
 	assert(mf->get_original_mf());
 	extra_mf_fields_lookup::iterator e = m_extra_mf_fields.find(mf->get_original_mf());
     assert( e != m_extra_mf_fields.end() );

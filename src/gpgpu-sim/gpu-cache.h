@@ -869,7 +869,29 @@ public:
     /// Checks if there is space for tracking a new memory access
     bool full( new_addr_type block_addr ) const;
     /// Add or merge this access
-    void add( new_addr_type block_addr, mem_fetch *mf );
+    template <int N = 0>//I add this template is to test the access behavior is correct,
+    void add(new_addr_type block_addr, mem_fetch *mf)
+    {
+        if (N != 0)
+        {
+            if (N == 1)
+            {
+                assert(m_data.find(block_addr) == m_data.end());
+            }
+            else
+            {
+                assert(m_data.find(block_addr) != m_data.end());
+            }
+        }
+        m_data[block_addr].m_list.push_back(mf);
+        assert(m_data.size() <= m_num_entries);
+        assert(m_data[block_addr].m_list.size() <= m_max_merged);
+        // indicate that this MSHR entry contains an atomic operation
+        if (mf->isatomic())
+        {
+            m_data[block_addr].m_has_atomic = true;
+        }
+    }
     /// Returns true if cannot accept new fill responses
     bool busy() const {return false;}
     /// Accept a new cache fill response: mark entry ready for processing

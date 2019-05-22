@@ -25,6 +25,19 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define SJQDEBUG
+#ifdef SJQDEBUG
+#define printdbg(...)                                                                                 \
+    do                                                                                                \
+    {                                                                                                 \
+        /*printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle);*/ \
+        printf(__VA_ARGS__);                                                                          \
+    } while (0)
+#elif
+#define printdbg(x)
+#endif
+
+
 #include "mem_fetch.h"
 #include "mem_latency_stat.h"
 #include "shader.h"
@@ -32,7 +45,10 @@
 #include "gpu-sim.h"
 
 unsigned mem_fetch::sm_next_mf_request_uid=1;
-
+#ifdef SJQDEBUG
+int mem_fetch::m_nums=0;
+#endif
+//std::unordered_map<mem_fetch*,unsigned long long> mf_map;
 mem_fetch::mem_fetch( const mem_access_t &access, 
                       const warp_inst_t *inst,
                       unsigned ctrl_size, 
@@ -44,6 +60,10 @@ mem_fetch::mem_fetch( const mem_access_t &access,
 					  mem_fetch *m_original_wr_mf):finished_tlb(false)
 
 {
+    #ifdef SJQDEBUG
+    m_nums++;
+    #endif
+    printdbg("mem_fetch(),mf total nums: %d\n",m_nums);
    m_request_uid = sm_next_mf_request_uid++;
    m_access = access;
    if( inst ) { 
@@ -66,11 +86,17 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    icnt_flit_size = config->icnt_flit_size;
    original_mf = m_original_mf;
    original_wr_mf = m_original_wr_mf;
+   //mf_map[this]=this->get_addr();
+   printdbg("mf: %llX,addr:%llX\n",this,get_addr());
 }
 
 mem_fetch::~mem_fetch()
 {
     m_status = MEM_FETCH_DELETED;
+    #ifdef SJQDEBUG
+    m_nums--;
+    #endif
+    printdbg("~mem_fetch: nums:%d\n",m_nums);
 }
 
 #define MF_TUP_BEGIN(X) static const char* Status_str[] = {

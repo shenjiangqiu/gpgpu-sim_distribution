@@ -132,7 +132,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                         else
                         {
                             printdbg("hit reserved! add to mfshr\n");
-                            m_mshrs->add(block_addr, mf);
+                            m_mshrs->add<2>(block_addr, mf);//not new
                             (*start)->set_last_access_time(time, mask);
                             return tlb_result::hit_reserved;
                         }
@@ -171,7 +171,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
         }
         auto next_line = has_free_line ? free_line : last_line;
         (*next_line)->allocate(tag, block_addr, time, mask);
-        m_mshrs->add(block_addr, mf);
+        m_mshrs->add<1>(block_addr, mf);
         m_miss_queue.push_back(mf);
         outgoing_mf.insert(mf);
         printdbg("outgoing insert! size:%lu\n", outgoing_mf.size());
