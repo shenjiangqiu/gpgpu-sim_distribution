@@ -60,7 +60,7 @@ extern unsigned long long gpu_tot_sim_cycle;
         printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
         printf(__VA_ARGS__);                                                                          \
     } while (0)
-#elif
+#else
 #define printdbg(x)
 #endif
 

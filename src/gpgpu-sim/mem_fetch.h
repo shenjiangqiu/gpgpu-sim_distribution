@@ -46,7 +46,7 @@ enum mf_type {
 #undef MF_TUP_BEGIN
 #undef MF_TUP
 #undef MF_TUP_END
-
+#define SJQDEBUG
 class mem_fetch {
 public:
     #ifdef SJQDEBUG
