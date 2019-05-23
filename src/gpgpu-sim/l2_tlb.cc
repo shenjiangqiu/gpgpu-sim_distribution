@@ -3,17 +3,8 @@
 #include "icnt_wrapper.h"
 #include <memory>
 #include <deque>
-#define SJQDEBUG
-#ifdef SJQDEBUG
-#define printdbg(...)                                                                                 \
-    do                                                                                                \
-    {                                                                                                 \
-        printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
-        printf(__VA_ARGS__);                                                                          \
-    } while (0)
-#else
-#define printdbg(x)
-#endif
+//#define TLBDEBUG
+#include"debug_macro.h"
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
 using std::cout;
@@ -126,21 +117,19 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                     case RESERVED:
                         if (m_mshrs->full(block_addr))
                         {
-                            printdbg("reserved! and mshr full\n");
+                            printdbg_tlb("reserved! and mshr full\n");
                             return tlb_result::resfail;
                         }
                         else
                         {
-                            printdbg("hit reserved! add to mfshr\n");
+                            printdbg_tlb("hit reserved! add to mfshr\n");
                             m_mshrs->add<2>(block_addr, mf);//not new
                             (*start)->set_last_access_time(time, mask);
                             return tlb_result::hit_reserved;
                         }
                         break;
                     case VALID:
-#ifdef SJQDEBUG
-                        printdbg("push to response queu: mf:%llX\n", mf->get_addr());
-#endif                                                   // SJQDEBUG
+                        printdbg_tlb("push to response queu: mf:%llX\n", mf->get_addr());
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                         return tlb_result::hit;
 
@@ -174,7 +163,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
         m_mshrs->add<1>(block_addr, mf);
         m_miss_queue.push_back(mf);
         outgoing_mf.insert(mf);
-        printdbg("outgoing insert! size:%lu\n", outgoing_mf.size());
+        printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
         return tlb_result::miss;
     }
 }
@@ -191,46 +180,46 @@ void l2_tlb::cycle()
     if (!m_response_queue.empty())
     { //from response queue to icnt
         auto mf = m_response_queue.front();
-        printdbg("send mf:%llX, to icnt\n", mf->get_addr());
+        printdbg_tlb("send mf:%llX, to icnt\n", mf->get_addr());
         auto size = 80u;
         if (::icnt_has_buffer(m_config.m_icnt_index, size))
         {
             ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
             m_response_queue.pop_front();
-            printdbg("successfully send to icnt\n");
+            printdbg_tlb("successfully send to icnt\n");
         }
         else
         {
-            printdbg("fail to send mf:%llX\n", mf->get_addr());
+            printdbg_tlb("fail to send mf:%llX\n", mf->get_addr());
         }
     }
     while (m_mshrs->access_ready()) //from mshr to response queue
     {                               //push all the ready access to response Queue
-        printdbg("send m_mshr next access to m response queue\n");
+        printdbg_tlb("send m_mshr next access to m response queue\n");
         m_response_queue.push_back(m_mshrs->next_access());
-        printdbg("the mf is:%llX\n", m_response_queue.back()->get_addr());
+        printdbg_tlb("the mf is:%llX\n", m_response_queue.back()->get_addr());
     }
     while (m_page_table_walker->ready())
     { //from page_table_walker to l2 tlb
         auto mf = m_page_table_walker->recv();
-        printdbg("the next page walker access to l2 tlb:fill()! mf:%llX\n", mf->get_addr());
+        printdbg_tlb("the next page walker access to l2 tlb:fill()! mf:%llX\n", mf->get_addr());
 
         fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
     }
     if (!m_miss_queue.empty()) //from l2tlb to page walker/different from l1 tlb
     {                          //send the request to
         auto mf = m_miss_queue.front();
-        printdbg("sending mf:%llX to page walker\n", mf->get_addr());
+        printdbg_tlb("sending mf:%llX to page walker\n", mf->get_addr());
         if (m_page_table_walker->free())
         {
             auto ret = m_page_table_walker->send(mf);
             assert(ret); //that must be true;
             m_miss_queue.pop_front();
-            printdbg("send success, miss queue pop,miss queue size:%lu\n", m_miss_queue.size());
+            printdbg_tlb("send success, miss queue pop,miss queue size:%lu\n", m_miss_queue.size());
         }
         else
         {
-            printdbg("send faild, page walker full,miss queue not pop,miss queue size:%lu\n", m_miss_queue.size());
+            printdbg_tlb("send faild, page walker full,miss queue not pop,miss queue size:%lu\n", m_miss_queue.size());
         }
     }
     mem_fetch *mf = nullptr;
@@ -239,13 +228,13 @@ void l2_tlb::cycle()
         mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
         if (mf)
         {
-            printdbg("get mf from icnt!access mf:%llX\n", mf->get_addr());
+            printdbg_tlb("get mf from icnt!access mf:%llX\n", mf->get_addr());
             m_recv_buffer.push(mf);
         }
     }
     else
     {
-        printdbg("in this cycle:%llu, the icnt recv buffer is full\n", gpu_sim_cycle + gpu_tot_sim_cycle);
+        printdbg_tlb("in this cycle:%llu, the icnt recv buffer is full\n", gpu_sim_cycle + gpu_tot_sim_cycle);
     }
 
     if (!m_recv_buffer.empty())
@@ -253,7 +242,7 @@ void l2_tlb::cycle()
         auto mf = m_recv_buffer.front();
         //in access(), will according to result, add to response queue, modify mshr , miss queue, and out of the access(), we need to deal with the mf.
         auto result = access(mf, gpu_sim_cycle + gpu_tot_sim_cycle); //this call will automatically add mf to miss queue, response queue or mshr
-        printdbg("access result: %s\n", result == tlb_result::hit ? "hit" : result == tlb_result::hit_reserved ? "hit res" : result == tlb_result::miss ? "miss" : "res fail");
+        printdbg_tlb("access result: %s\n", result == tlb_result::hit ? "hit" : result == tlb_result::hit_reserved ? "hit res" : result == tlb_result::miss ? "miss" : "res fail");
         switch (result)
         {
         case tlb_result::resfail: //in this case , we do not pop m_recv_buffer
@@ -300,6 +289,6 @@ void l2_tlb::fill(mem_fetch *mf, unsigned long long time) //that will be called 
     }
     assert(done);
     this->del_outgoing(mf);
-    printdbg("out going del: size: %lu\n", outgoing_mf.size());
+    printdbg_tlb("out going del: size: %lu\n", outgoing_mf.size());
     return;
 }

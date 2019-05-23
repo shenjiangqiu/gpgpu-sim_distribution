@@ -439,6 +439,8 @@ private:
     		if(sector_mask.to_ulong() & (1<<i))
     			return i;
     	}
+        throw std::runtime_error("can't reach their");
+        return 1;
     }
 };
 

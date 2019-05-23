@@ -46,10 +46,10 @@ enum mf_type {
 #undef MF_TUP_BEGIN
 #undef MF_TUP
 #undef MF_TUP_END
-#define SJQDEBUG
+//#define TLBDEBUG
 class mem_fetch {
 public:
-    #ifdef SJQDEBUG
+    #ifdef TLBDEBUG
     static int m_nums;
     #endif
     mem_fetch( const mem_access_t &access, 
@@ -63,7 +63,7 @@ public:
 			   mem_fetch *original_wr_mf = NULL);
    ~mem_fetch();
     bool finished_tlb;
-    #ifdef SJQDEBUG
+    #ifdef TLBDEBUG
     unsigned icnt_from;
     #endif
    void set_status( enum mem_fetch_status status, unsigned long long cycle );

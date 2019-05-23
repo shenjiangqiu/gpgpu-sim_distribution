@@ -1,21 +1,12 @@
 #include "page_table_walker.hpp"
 #include<unordered_map>
-#define SJQDEBUG
-#ifdef SJQDEBUG
-#define printdbg(...)                                                                                 \
-    do                                                                                                \
-    {                                                                                                 \
-        printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
-        printf(__VA_ARGS__);                                                                          \
-    } while (0)
-#else
-#define printdbg(x)
-#endif
+//#define TLBDEBUG
+#include"debug_macro.h"
 
 extern unsigned long long  gpu_sim_cycle;
 extern unsigned long long  gpu_tot_sim_cycle;
-latency_queue::latency_queue(unsigned long long latency, unsigned size) : m_latency(latency),
-                                                                               m_size_limit(size)
+latency_queue::latency_queue(unsigned long long latency, unsigned size) : m_size_limit(size),
+                                                                          m_latency(latency)
 {
 }
 
@@ -25,12 +16,10 @@ bool latency_queue::add(mem_fetch* v, unsigned long long time)
     {
         throw std::runtime_error("can't exceed the limit of pagewalker size\n");
     }
-    printdbg("l2 pw add,mf mf: %u,addr:%llX\n",v,v->get_addr());
+    printdbg_tlb("l2 pw add,mf mf: %p,addr:%llX\n",v,v->get_addr());
 
     auto temp = std::make_pair(time + m_latency, v);
-    #ifdef SJQDEBUG
-    //auto num=v->sm_next_mf_request_uid;
-    #endif
+    
     m_elements.push(temp);
     return true;
 }
@@ -53,7 +42,7 @@ mem_fetch* latency_queue::get()
 {
     assert(!m_elements.empty());
     auto v=m_elements.front().second;
-    //printdbg("l2 pw get,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_addr());
+    //printdbg_tlb("l2 pw get,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_addr());
     return v;
 }
 //extern std::unordered_map<mem_fetch*,unsigned long long> mf_map;
@@ -61,12 +50,12 @@ mem_fetch* latency_queue::pop()
 {
     assert(!m_elements.empty());
     auto v = m_elements.front().second;
-    printdbg("pop: mf %llX\n",v);
-    #ifdef SJQDEBUG
+    printdbg_tlb("pop: mf %p\n",v);
+    #ifdef TLBDEBUG
     fflush(stdout);
     fflush(stderr);
     #endif
-    //printdbg("l2 pw pop,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_addr());
+    //printdbg_tlb("l2 pw pop,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_addr());
     m_elements.pop();
     return v;
 }

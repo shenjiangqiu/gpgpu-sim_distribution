@@ -4,17 +4,8 @@
 #include <deque>
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
-#define SJQDEBUG
-#ifdef SJQDEBUG
-#define printdbg(...)                                                                                 \
-    do                                                                                                \
-    {                                                                                                 \
-        printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
-        printf(__VA_ARGS__);                                                                          \
-    } while (0)
-#else
-#define printdbg(x)
-#endif
+//#define TLBDEBUG
+#include"debug_macro.h"
 l1_tlb::l1_tlb(l1_tlb_config config, std::shared_ptr<page_manager> tlb_page_manager) : m_config(config),
                                                                                        m_page_manager(tlb_page_manager),
                                                                                        m_mshrs(std::make_shared<mshr_table>(config.n_mshr_entries, config.n_mshr_max_merge)),
@@ -29,6 +20,8 @@ l1_tlb_config::l1_tlb_config() {} //in constructor, just allocate the memory, an
 
 void l1_tlb_config::init()
 {
+    //for test
+    //assert(false);
     assert(m_page_size > 0);
     if (m_page_size == 4096)
         m_page_size_log2 = 12;
@@ -99,7 +92,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         decltype(start) hit_line;
         decltype(start) last_line;
         auto mask = mf->get_access_sector_mask();
-        printdbg("l1 access mf:%llX\n", mf->get_addr());
+        printdbg_tlb("l1 access mf:%llX\n", mf->get_addr());
         for (; start < end; start++)
         {
             if (!(*start)->is_invalid_line())//previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
@@ -118,21 +111,19 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                     case RESERVED:
                         if (m_mshrs->full(block_addr))
                         {
-                            printdbg("l1 hit_reserved and mshr full\n");
+                            printdbg_tlb("l1 hit_reserved and mshr full\n");
                             return tlb_result::resfail;
                         }
                         else
                         {
                             m_mshrs->add<2>(block_addr, mf);//adding to existing entry
-                            printdbg("l1 hit_reserved and push to mshr\n");
+                            printdbg_tlb("l1 hit_reserved and push to mshr\n");
                             (*start)->set_last_access_time(time, mask);
                             return tlb_result::hit_reserved;
                         }
                         break;
                     case VALID:
-#ifdef SJQDEBUG
-                        printdbg("push to response queu: mf: %llX\n", mf->get_addr());
-#endif                                                   // SJQDEBUG
+                        printdbg_tlb("push to response queu: mf: %llX\n", mf->get_addr());
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                         return tlb_result::hit;
 
@@ -159,11 +150,11 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         // when run to here, means no hit line found,It's a miss;
         if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
         {
-            printdbg("miss and mshr fail: mf:%llX\n", mf->get_addr());
+            printdbg_tlb("miss and mshr fail: mf:%llX\n", mf->get_addr());
             return tlb_result::resfail;
         }
         auto next_line = has_free_line ? free_line : last_line;
-        printdbg("miss and allocate, send to miss queue and mshr, mf:%llX\n", mf->get_addr());
+        printdbg_tlb("miss and allocate, send to miss queue and mshr, mf:%llX\n", mf->get_addr());
         (*next_line)->allocate(tag, block_addr, time, mask);
         m_mshrs->add<1>(block_addr, mf);//adding to new entry
         m_miss_queue.push_back(mf); //miss
@@ -187,7 +178,7 @@ void l1_tlb::cycle()
         auto size = mf->get_ctrl_size(); //read only need 8 bytes
         if (::icnt_has_buffer(mf->get_tpc(), size))
         {
-            printdbg("from miss queue to icnt,mftpc: %u;mf :%llX\n", mf->get_tpc(), mf->get_addr());
+            printdbg_tlb("from miss queue to icnt,mftpc: %u;mf :%llX\n", mf->get_tpc(), mf->get_addr());
             ::icnt_push(mf->get_tpc(), m_config.m_icnt_index, mf, size);
             m_miss_queue.pop_front(); //successfully pushed to icnt
         }
@@ -209,7 +200,7 @@ void l1_tlb::fill(mem_fetch *mf, unsigned long long time)
     auto set_index = (v_addr >> m_page_size_log2) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
     auto tag = v_addr & (~static_cast<addr_type>(m_config.m_page_size - 1));           //only need the bits besides page offset
     auto block_addr = v_addr >> m_page_size_log2;
-    printdbg("l1 tlb fill, mf:%llX, core id:%u, blockaddr:%llX\n",mf->get_addr(),mf->get_sid(),block_addr);
+    printdbg_tlb("l1 tlb fill, mf:%llX, core id:%u, blockaddr:%llX\n",mf->get_addr(),mf->get_sid(),block_addr);
     bool has_atomic;
     m_mshrs->mark_ready(block_addr, has_atomic);
     auto start = m_tag_arrays.begin() + set_index * n_assoc;

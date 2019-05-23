@@ -28,26 +28,10 @@
 #include "gpu-cache.h"
 #include "stat-tool.h"
 #include <assert.h>
-#define SJQDEBUG
+//#define TLBDEBUG
 
-#ifdef SJQDEBUG
-#define setif(...) __VA_ARGS__
-#else
-#define setif(...) 
-#endif
+#include"debug_macro.h"
 
-#ifdef SJQDEBUG
-extern unsigned long long gpu_sim_cycle;
-extern unsigned long long gpu_tot_sim_cycle;
-#define printdbg(...)                                                                                 \
-    do                                                                                                \
-    {                                                                                                 \
-        printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
-        printf(__VA_ARGS__);                                                                          \
-    } while (0)
-#else
-#define printdbg(x)
-#endif
 // used to allocate memory that is large enough to adapt the changes in cache size across kernels
 
 const char * cache_request_status_str(enum cache_request_status status) 
@@ -966,7 +950,7 @@ void baseline_cache::cycle(){
 void baseline_cache::fill(mem_fetch *mf, unsigned time){
 
 	if(m_config.m_mshr_type == SECTOR_ASSOC) {
-        printdbg("mf:%llX\n",mf->get_addr());
+        printdbg_tlb("mf:%llX\n",mf->get_addr());
 	assert(mf->get_original_mf());
 	extra_mf_fields_lookup::iterator e = m_extra_mf_fields.find(mf->get_original_mf());
     assert( e != m_extra_mf_fields.end() );
@@ -1349,7 +1333,7 @@ data_cache::wr_miss_wa_lazy_fetch_on_read( new_addr_type addr,
 {
 
 	    new_addr_type block_addr = m_config.block_addr(addr);
-	    new_addr_type mshr_addr = m_config.mshr_addr(mf->get_addr());
+	    //new_addr_type mshr_addr = m_config.mshr_addr(mf->get_addr());
 
 
 		//if the request writes to the whole cache line/sector, then, write and set cache line Modified.

@@ -25,12 +25,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define SJQDEBUG
-#ifdef SJQDEBUG
-#define printdbg(...) printf(__VA_ARGS__)
-#else
-#define printdbg(...) void(0)
-#endif
+//#define TLBDEBUG
+#include"debug_macro.h"
 #include "icnt_wrapper.h"
 #include <assert.h>
 #include "../intersim2/globals.hpp"
@@ -76,10 +72,10 @@ static bool intersim2_has_buffer(unsigned input, unsigned int size)
 static void intersim2_push(unsigned input, unsigned output, void* data, unsigned int size)
 {
    auto mf=(mem_fetch*)data;
-   #ifdef SJQDEBUG
+   #ifdef TLBDEBUG
    mf->icnt_from=input;
    #endif
-   printdbg("inct push,mf:%llX,in:%u,out:%u\n",mf->get_addr(),input,output);
+   printdbg_tlb("inct push,mf:%llX,in:%u,out:%u\n",mf->get_addr(),input,output);
    g_icnt_interface->Push(input, output, data, size);
 }
 

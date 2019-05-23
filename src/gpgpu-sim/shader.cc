@@ -50,19 +50,9 @@
 #define PRIORITIZE_MSHR_OVER_WB 1
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
-extern unsigned long long gpu_sim_cycle;
-extern unsigned long long gpu_tot_sim_cycle;
-#define SJQDEBUG
-#ifdef SJQDEBUG
-#define printdbg(...)                                                                                 \
-    do                                                                                                \
-    {                                                                                                 \
-        printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle); \
-        printf(__VA_ARGS__);                                                                          \
-    } while (0)
-#else
-#define printdbg(x)
-#endif
+//#define TLBDEBUG
+#define FETCHDEBUG
+#include"debug_macro.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -829,17 +819,21 @@ void shader_core_ctx::fetch()
                             m_tpc,
                             m_memory_config );
                     std::list<cache_event> events;
+                    printdbg_fetch("new mf fetch probe: mf:%llX\n",mf->get_addr());
                     enum cache_request_status status = m_L1I->access( (new_addr_type)ppc, mf, gpu_sim_cycle+gpu_tot_sim_cycle,events);
                     if( status == MISS ) {
+                        printdbg_fetch("fetch miss!\n");
                         m_last_warp_fetched=warp_id;
                         m_warp[warp_id].set_imiss_pending();
                         m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
                     } else if( status == HIT ) {
+                        printdbg_fetch("fetch hit!\n");
                         m_last_warp_fetched=warp_id;
                         m_inst_fetch_buffer = ifetch_buffer_t(pc,nbytes,warp_id);
                         m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
                         delete mf;
                     } else {
+                        printdbg_fetch("fetch res fail!\n");
                         m_last_warp_fetched=warp_id;
                         assert( status == RESERVATION_FAIL );
                         delete mf;
@@ -2389,10 +2383,10 @@ void ldst_unit::cycle()
        mem_fetch *mf = m_response_fifo.front();
        assert(m_l1_tlb);
        assert(mf);
-       printdbg("access from icnt,mf:%llX\n",mf->get_addr());
+       printdbg_tlb("access from icnt,mf:%llX\n",mf->get_addr());
        if (m_l1_tlb->is_outgoing(mf)) //this is a tlb_resquest
        {
-           printdbg("m_l1_tlb accept this mf:%llX\n",mf->get_addr());
+           printdbg_tlb("m_l1_tlb accept this mf:%llX\n",mf->get_addr());
            m_l1_tlb->del_outgoing(mf);
            //mf will fill the l1 tlb cache, and return to tlb_response queue;
            m_l1_tlb->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
@@ -2407,7 +2401,7 @@ void ldst_unit::cycle()
        }
        else
        {
-           printdbg("l1D access this mf:%llX\n",mf->get_addr());
+           printdbg_tlb("l1D access this mf:%llX\n",mf->get_addr());
 
            if (mf->get_access_type() == TEXTURE_ACC_R)
            {

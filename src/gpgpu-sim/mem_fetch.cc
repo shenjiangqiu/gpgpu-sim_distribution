@@ -25,17 +25,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define SJQDEBUG
-#ifdef SJQDEBUG
-#define printdbg(...)                                                                                 \
-    do                                                                                                \
-    {                                                                                                 \
-        /*printf("%s:%d:%s:%llu____", __FILE__, __LINE__, __func__, gpu_sim_cycle + gpu_tot_sim_cycle);*/ \
-        printf(__VA_ARGS__);                                                                          \
-    } while (0)
-#else
-#define printdbg(x)
-#endif
+//#define TLBDEBUG
+#include"debug_macro.h"
 
 
 #include "mem_fetch.h"
@@ -45,7 +36,7 @@
 #include "gpu-sim.h"
 
 unsigned mem_fetch::sm_next_mf_request_uid=1;
-#ifdef SJQDEBUG
+#ifdef TLBDEBUG
 int mem_fetch::m_nums=0;
 #endif
 //std::unordered_map<mem_fetch*,unsigned long long> mf_map;
@@ -60,10 +51,10 @@ mem_fetch::mem_fetch( const mem_access_t &access,
 					  mem_fetch *m_original_wr_mf):finished_tlb(false)
 
 {
-    #ifdef SJQDEBUG
+    #ifdef TLBDEBUG
     m_nums++;
     #endif
-    printdbg("mem_fetch(),mf total nums: %d\n",m_nums);
+    printdbg_tlb("mem_fetch(),mf total nums: %d,current id %u\n",m_nums,sm_next_mf_request_uid);
    m_request_uid = sm_next_mf_request_uid++;
    m_access = access;
    if( inst ) { 
@@ -87,16 +78,19 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    original_mf = m_original_mf;
    original_wr_mf = m_original_wr_mf;
    //mf_map[this]=this->get_addr();
-   printdbg("mf: %llX,addr:%llX\n",this,get_addr());
+   #ifdef TLBDEBUG
+   auto addr=this->get_addr();
+   #endif   
+   printdbg_tlb("mf: %p,addr:%llX\n",this,addr);
 }
 
 mem_fetch::~mem_fetch()
 {
     m_status = MEM_FETCH_DELETED;
-    #ifdef SJQDEBUG
+    #ifdef TLBDEBUG
     m_nums--;
     #endif
-    printdbg("~mem_fetch: nums:%d\n",m_nums);
+    printdbg_tlb("~mem_fetch: mf:%p ,nums:%d\n",this,m_nums);
 }
 
 #define MF_TUP_BEGIN(X) static const char* Status_str[] = {

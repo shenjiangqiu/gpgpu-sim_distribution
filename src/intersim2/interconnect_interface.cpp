@@ -246,7 +246,7 @@ bool InterconnectInterface::Busy() const
   else
     return true;
   for (int s = 0; s < _subnets; ++s) {
-    for (unsigned n=0; n < (_n_shader+_n_mem); ++n) {
+    for (unsigned n=0; n < (_n_shader+_n_mem+1); ++n) {//one l2 tlb partition
       for (int vc=0; vc<_vcs; ++vc) {
         if (_boundary_buffer[s][n][vc].HasPacket() ) {
           return true;

@@ -44,9 +44,11 @@ endif
 
 CPPFLAGS += -Wall $(INCPATH) $(DEFINE)
 ifneq ($(DEBUG),1)
-CPPFLAGS += -O3
+CPPFLAGS += -O3 -DNDEBUG
+else
+CPPFLAGS += -g
 endif
-CPPFLAGS += -g -std=c++11
+CPPFLAGS +=  -std=c++11
 CPPFLAGS += -fPIC
 LFLAGS +=
 

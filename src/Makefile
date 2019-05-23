@@ -46,12 +46,12 @@ ifeq ($(TRACE),1)
 endif
 
 ifneq ($(DEBUG),1)
-	OPTFLAGS += -O3
+	OPTFLAGS += -O3 -DNDEBUG
 else
-	CXXFLAGS += 
+	CXXFLAGS += -g3
 endif
 
-OPTFLAGS += -g3 -fPIC
+OPTFLAGS +=  -fPIC
 
 CPP = g++ $(SNOW)
 OEXT = o
