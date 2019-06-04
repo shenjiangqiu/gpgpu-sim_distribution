@@ -2,6 +2,19 @@
 #include <stdlib.h>
 #include <assert.h>
 //range
+
+page_manager* global_page_manager;
+
+class global_page_manager_init{
+    public:
+    global_page_manager_init(){
+        global_page_manager=new page_manager();
+    }
+
+};
+global_page_manager_init m_global_page_manager_init;
+
+
 range::range() : start(0), end(0) {}
 range::range(addr_type start, addr_type end) : start(start), end(end) {}
 bool range::equel_size(const range &other) const
@@ -59,28 +72,41 @@ page_manager::page_manager(/* args */) : virtual_to_physic(),
                                          physic_to_virtual(),
                                          virtual_free_ranges(),
                                          virtual_used_ranges(),
+                                         physic_free_ranges(),
+                                         physic_used_ranges(),
                                          page_table_ranges_free(),
                                          page_table_ranges_used(),
-                                         end_addr(physic_start),
-                                         tlb_start_addr(tlb_start),
-                                         tlb_max_addr(tlb_end),
-                                         tlb_end_addr(tlb_start_addr),
+                                         current_pagetable_end_addr(pagetable_start),
                                          root(nullptr)
 {
-    virtual_free_ranges.insert(range(physic_start, physic_end));
-    page_table_ranges_free.insert(range(tlb_start_addr, tlb_max_addr));
+    virtual_free_ranges.insert(range(virtual_start, virtual_end));
+    physic_free_ranges.insert(range(physic_start,physic_end));
+    page_table_ranges_free.insert(range(pagetable_start, pagetable_end));
 }
 
 page_manager::~page_manager()
 {
     delete root;
 }
+addr_type page_manager::translate(addr_type virtual_addr){
 
+    auto page_id=virtual_addr & ~(4095ull);
+    auto it=virtual_to_physic.find(page_id);
+    if(it!=virtual_to_physic.end()){
+        return it->second;
+    }else{
+        //this address is not from malloc. maybe a instruction addr.
+        auto physic_page=get_valid_physic_page();
+        add_page_table(page_id,physic_page);
+        virtual_to_physic[page_id]=physic_page;
+        physic_to_virtual[physic_page]=page_id;
+    }
+}
 
-addr_type page_manager::get_vir_addr(addr_type origin)
+/* addr_type page_manager::get_vir_addr(addr_type origin)
 {
     return origin;
-}
+} */
 
 
 void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
@@ -280,4 +306,14 @@ void page_table::add_page_table_entry(addr_type virtual_page_number, addr_type p
 
 unsigned short page_table::get_m_index(addr_type virtual_addr){
     return (unsigned short ) (virtual_addr&m_mask)>>offset;
+}
+
+
+page_table_level get_next_level(page_table_level this_level){
+    if(this_level==page_table_level::L1_LEAF){
+        throw std::runtime_error("no next level for L1");
+    }else{
+        return static_cast<page_table_level>(static_cast<unsigned>(this_level)+1);
+    }
+
 }
