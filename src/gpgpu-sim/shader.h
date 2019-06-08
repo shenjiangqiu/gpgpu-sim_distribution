@@ -1288,7 +1288,7 @@ protected:
                unsigned sid,
                unsigned tpc );
 
-protected:
+public:
    bool shared_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
    bool constant_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
    bool texture_cycle( warp_inst_t &inst, mem_stage_stall_type &rc_fail, mem_stage_access_type &fail_type);
@@ -1428,6 +1428,7 @@ struct shader_core_config : public core_config
         m_L1C_config.init(m_L1C_config.m_config_string, FuncCachePreferNone);
         m_L1D_config.init(m_L1D_config.m_config_string, FuncCachePreferNone);
         m_L1TLB_config.init();
+        m_L1ITLB_config.init();
         gpgpu_cache_texl1_linesize = m_L1T_config.get_line_sz();
         gpgpu_cache_constl1_linesize = m_L1C_config.get_line_sz();
         m_valid = true;
@@ -1461,7 +1462,7 @@ struct shader_core_config : public core_config
     mutable cache_config m_L1C_config;
     mutable l1d_cache_config m_L1D_config;
     mutable l1_tlb_config m_L1TLB_config;
-
+    mutable l1I_tlb_config m_L1ITLB_config;
     bool gpgpu_dwf_reg_bankconflict;
 
     int gpgpu_num_sched_per_core;
@@ -1775,6 +1776,8 @@ private:
 
 class shader_core_ctx : public core_t {
 public:
+    l1_tlb *m_l1I_tlb;
+    std::deque<mem_fetch*> instruction_tlb_response_queue;
     // creator:
     shader_core_ctx( class gpgpu_sim *gpu,
                      class simt_core_cluster *cluster,

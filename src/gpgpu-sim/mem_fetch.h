@@ -49,6 +49,7 @@ enum mf_type {
 //#define TLBDEBUG
 class mem_fetch {
 public:
+    mem_fetch* pw_origin;
     #ifdef TLBDEBUG
     static int m_nums;
     #endif
@@ -60,9 +61,11 @@ public:
                unsigned tpc, 
                const struct memory_config *config,
 			   mem_fetch *original_mf = NULL,
-			   mem_fetch *original_wr_mf = NULL);
+			   mem_fetch *original_wr_mf = NULL,
+               mem_fetch *pw_origin=NULL );
    ~mem_fetch();
-    bool finished_tlb;
+   void reset_raw_addr();
+   bool finished_tlb;
     #ifdef TLBDEBUG
     unsigned icnt_from;
     #endif
@@ -87,13 +90,16 @@ public:
    void     set_data_size( unsigned size ) { m_data_size=size; }
    unsigned get_ctrl_size() const { return m_ctrl_size; }
    unsigned size() const { return m_data_size+m_ctrl_size; }
-   bool is_write() {return m_access.is_write();}
-   void set_addr(new_addr_type addr) { m_access.set_addr(addr); }
-   new_addr_type get_addr() const { return m_access.get_addr(); }
-   unsigned get_access_size() const { return m_access.get_size(); }
+   bool is_write() {return get_is_write();}
+   void set_addr(new_addr_type addr) { physic_addr=addr; }
+   new_addr_type get_virtual_addr() const { return virtual_addr; }
+   new_addr_type get_addr() const { return physic_addr; }
+
+   new_addr_type get_physic_addr() const{return physic_addr;}
+   unsigned get_access_size() const { return  m_access.get_size(); }
    new_addr_type get_partition_addr() const { return m_partition_addr; }
    unsigned get_sub_partition_id() const { return m_raw_addr.sub_partition; }
-   bool     get_is_write() const { return m_access.is_write(); }
+   bool     get_is_write() const { return pw_origin==NULL?m_access.is_write():false; }
    unsigned get_request_uid() const { return m_request_uid; }
    unsigned get_sid() const { return m_sid; }
    unsigned get_tpc() const { return m_tpc; }
@@ -124,8 +130,9 @@ public:
 
    mem_fetch* get_original_mf() { return original_mf; }
    mem_fetch* get_original_wr_mf()  { return original_wr_mf; }
-    
-    private:
+      new_addr_type virtual_addr;
+    new_addr_type physic_addr;
+
    // request source information
    unsigned m_request_uid;
    unsigned m_sid;
@@ -135,7 +142,7 @@ public:
    // where is this request now?
    enum mem_fetch_status m_status;
    unsigned long long m_status_change;
-
+    
    // request type, address, size, mask
    mem_access_t m_access;
    unsigned m_data_size; // how much data is being written

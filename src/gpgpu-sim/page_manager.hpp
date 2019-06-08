@@ -10,7 +10,7 @@ using addr_type = unsigned long long;
 using addr_map = std::unordered_map<addr_type, addr_type>;
 constexpr unsigned long ALLOCATE_MASK = 0xFFFFFFFFFFFFFF00;
 class page_manager;
-extern page_manager* global_page_manager;
+extern page_manager *global_page_manager;
 class range
 {
 public:
@@ -32,10 +32,10 @@ private:
 
 enum class page_table_level
 {
-    L4_ROOT=0,
-    L3=1,
-    L2=2,
-    L1_LEAF=3
+    L4_ROOT = 0,
+    L3 = 1,
+    L2 = 2,
+    L1_LEAF = 3
 };
 page_table_level get_next_level(page_table_level this_level);
 
@@ -64,20 +64,20 @@ std::ostream &operator<<(std::ostream &out, const range &m_range);
 
 std::ostream &operator<<(std::ostream &out, const range_set_compare_by_size &freeranges);
 //stream end
-constexpr addr_type physic_start =      0x000010000000;
-constexpr addr_type physic_end =        0x0000c0000000;
-constexpr addr_type pagetable_start =   0x0000c0000000;
-constexpr addr_type pagetable_end =     0xcfffffffffff;
-constexpr addr_type code_start =        0x0000f0000000;//that is get from test.
-constexpr addr_type virtual_start =     0x000f00000000;
-constexpr addr_type virtual_end =       0xf00000000000;
+constexpr addr_type physic_start = 0x000010000000;
+constexpr addr_type physic_end = 0x0000c0000000;
+constexpr addr_type pagetable_start = 0x0000c0000000;
+constexpr addr_type pagetable_end = 0xcfffffffffff;
+constexpr addr_type code_start = 0x0000f0000000; //that is get from test.
+constexpr addr_type virtual_start = 0x000f00000000;
+constexpr addr_type virtual_end = 0xf00000000000;
 class page_table;
 class page_manager
 {
 
 public:
     addr_type translate(addr_type virtual_addr);
-
+    addr_type get_pagetable_physic_addr(addr_type virtual_addr, page_table_level level);
     page_manager(/* args */);
     ~page_manager();
     void *cudaMalloc(size_t size);
@@ -87,21 +87,19 @@ public:
     void add_page_table(addr_type virtual_page_number, addr_type physic_page_number);
     page_table *creat_new_page_table(page_table_level level);
 
-
-
 private:
-    addr_map virtual_to_physic;//all L1 entries
+    addr_map virtual_to_physic; //all L1 entries
     addr_map physic_to_virtual;
     range_set_compare_by_size virtual_free_ranges; //virtual addr, only use mast , no shift, only responsible for malloc, not for other addr
     range_set_compare_by_start virtual_used_ranges;
 
-    range_set_compare_by_start physic_free_ranges;//only  physic pages
+    range_set_compare_by_start physic_free_ranges; //only  physic pages
     range_set_compare_by_start physic_used_ranges;
 
     range_set_compare_by_start page_table_ranges_free; //physic addr
     range_set_compare_by_start page_table_ranges_used;
     //addr_type end_addr;
-    
+
     addr_type current_pagetable_end_addr; //current last addr
     /* data */
     page_table *root;
@@ -112,12 +110,12 @@ constexpr addr_type masks[] = {
     0x00003FE00000,
     0x0000001FF000};
 
-
 class page_table
 {
 public:
-    page_table(page_table_level level,addr_type physic_addr,page_manager* m_page_manager);
+    page_table(page_table_level level, addr_type physic_addr, page_manager *m_page_manager);
     void add_page_table_entry(addr_type virtual_page_number, addr_type physic_page_number);
+    addr_type get_physic_addr(addr_type virtual_addr, page_table_level level);
 
 private:
     unsigned short get_m_index(addr_type virtual_addr);

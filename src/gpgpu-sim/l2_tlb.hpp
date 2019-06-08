@@ -11,6 +11,9 @@
 #include <utility>
 #include<memory>
 #include<unordered_set>
+extern unsigned global_n_cores;
+
+extern unsigned global_l2_tlb_index;
 class l2_tlb_config{
     public:
     l2_tlb_config();
@@ -31,13 +34,17 @@ class l2_tlb_config{
     unsigned recv_buffer_size;
     unsigned m_pw_size;
     unsigned m_pw_latency;
+    page_table_walker_config m_page_table_walker_config;
+    //TODO add pw config, add regoption add init
 };
 
 class l2_tlb{
+
+    //TODO add abstract_page_walker, inti page_walker.
     using us_mf_it=std::unordered_set<mem_fetch*>::iterator;
     
     public:
-    l2_tlb(l2_tlb_config m_config,std::shared_ptr<page_manager> );
+    l2_tlb(l2_tlb_config m_config);
     void init();
     tlb_result access(mem_fetch* mf,unsigned time);
     mem_fetch* get_top_response();
@@ -52,8 +59,8 @@ class l2_tlb{
     
     protected:
     l2_tlb_config m_config;//init in constructor
-    std::unique_ptr<page_table_walker> m_page_table_walker;
-    std::shared_ptr<page_manager> m_page_manager;//init in constructor
+    abstract_page_table_walker* m_page_table_walker;
+    page_manager* m_page_manager;//init in constructor
     
 	std::shared_ptr<mshr_table> m_mshrs;
     std::vector<std::shared_ptr<cache_block_t>> m_tag_arrays;

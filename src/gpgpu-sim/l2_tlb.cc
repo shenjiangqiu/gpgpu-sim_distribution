@@ -4,27 +4,31 @@
 #include <memory>
 #include <deque>
 //#define TLBDEBUG
-#include"debug_macro.h"
+#include "debug_macro.h"
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
 using std::cout;
 using std::endl;
-l2_tlb::l2_tlb(l2_tlb_config config,
-               std::shared_ptr<page_manager> tlb_page_manager) : m_config(config),
-                                                                 m_page_table_walker(new page_table_walker(config.m_pw_size, config.m_pw_latency)),
-                                                                 m_page_manager(tlb_page_manager),
-                                                                 m_mshrs(std::make_shared<mshr_table>(m_config.n_mshr_entries, m_config.n_mshr_max_merge)),
-                                                                 m_tag_arrays(m_config.n_sets * m_config.n_associate) //null shared point
+
+unsigned global_l2_tlb_index;
+unsigned global_n_cores;
+l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
+                                       m_page_table_walker(new real_page_table_walker(config.m_page_table_walker_config)),
+                                       m_page_manager(global_page_manager),
+                                       m_mshrs(std::make_shared<mshr_table>(m_config.n_mshr_entries, m_config.n_mshr_max_merge)),
+                                       m_tag_arrays(m_config.n_sets * m_config.n_associate) //null shared point
 {
     for (unsigned i = 0; i < m_config.n_sets * m_config.n_associate; i++)
     {
         m_tag_arrays[i] = std::make_shared<line_cache_block>();
     }
+    global_l2_tlb_index=m_config.m_icnt_index;
 }
 l2_tlb_config::l2_tlb_config() {} //in constructor, just allocate the memory, and then parse configur,then
 
 void l2_tlb_config::init()
 {
+    m_page_table_walker_config.init();
     assert(m_page_size > 0);
     if (m_page_size == 4096)
         m_page_size_log2 = 12;
@@ -35,7 +39,7 @@ void l2_tlb_config::init()
 }
 void l2_tlb_config::reg_option(option_parser_t opp)
 {
-
+    m_page_table_walker_config.reg_option(opp);
     option_parser_register(opp, "-l2tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l2 tlb", "64");
     option_parser_register(opp, "-l2tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
     option_parser_register(opp, "-l2tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the mshr size", "16");
@@ -79,8 +83,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
     else
     {
         /* code */
-        auto addr = mf->get_addr();
-        auto v_addr = m_page_manager->get_vir_addr(addr);
+        auto v_addr = mf->get_virtual_addr();
         auto m_page_size_log2 = m_config.m_page_size_log2;
         auto n_set = m_config.n_sets;
         auto n_assoc = m_config.n_associate;
@@ -123,13 +126,13 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                         else
                         {
                             printdbg_tlb("hit reserved! add to mfshr\n");
-                            m_mshrs->add<2>(block_addr, mf);//not new
+                            m_mshrs->add<2>(block_addr, mf); //not new
                             (*start)->set_last_access_time(time, mask);
                             return tlb_result::hit_reserved;
                         }
                         break;
                     case VALID:
-                        printdbg_tlb("push to response queu: mf:%llX\n", mf->get_addr());
+                        printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                         return tlb_result::hit;
 
@@ -180,8 +183,8 @@ void l2_tlb::cycle()
     if (!m_response_queue.empty())
     { //from response queue to icnt
         auto mf = m_response_queue.front();
-        printdbg_tlb("send mf:%llX, to icnt\n", mf->get_addr());
-        auto size = 80u;
+        printdbg_tlb("send mf:%llX, to icnt\n", mf->get_virtual_addr());
+        auto size = 8+8;//ctrl size plus one tlb targe address
         if (::icnt_has_buffer(m_config.m_icnt_index, size))
         {
             ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
@@ -190,7 +193,7 @@ void l2_tlb::cycle()
         }
         else
         {
-            printdbg_tlb("fail to send mf:%llX\n", mf->get_addr());
+            printdbg_tlb("fail to send mf:%llX\n", mf->get_virtual_addr());
         }
     }
     while (m_mshrs->access_ready()) //from mshr to response queue
@@ -202,14 +205,14 @@ void l2_tlb::cycle()
     while (m_page_table_walker->ready())
     { //from page_table_walker to l2 tlb
         auto mf = m_page_table_walker->recv();
-        printdbg_tlb("the next page walker access to l2 tlb:fill()! mf:%llX\n", mf->get_addr());
+        printdbg_tlb("the next page walker access to l2 tlb:fill()! mf:%llX\n", mf->get_virtual_addr());
 
         fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
     }
     if (!m_miss_queue.empty()) //from l2tlb to page walker/different from l1 tlb
     {                          //send the request to
         auto mf = m_miss_queue.front();
-        printdbg_tlb("sending mf:%llX to page walker\n", mf->get_addr());
+        printdbg_tlb("sending mf:%llX to page walker\n", mf->get_virtual_addr());
         if (m_page_table_walker->free())
         {
             auto ret = m_page_table_walker->send(mf);
@@ -228,7 +231,7 @@ void l2_tlb::cycle()
         mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
         if (mf)
         {
-            printdbg_tlb("get mf from icnt!access mf:%llX\n", mf->get_addr());
+            printdbg_tlb("get mf from icnt!access mf:%llX\n", mf->get_virtual_addr());
             m_recv_buffer.push(mf);
         }
     }
@@ -258,8 +261,7 @@ void l2_tlb::cycle()
 }
 void l2_tlb::fill(mem_fetch *mf, unsigned long long time) //that will be called from l2_tlb.cycle
 {
-    auto addr = mf->get_addr();
-    auto v_addr = m_page_manager->get_vir_addr(addr);
+    auto v_addr = mf->get_virtual_addr();
     auto m_page_size_log2 = m_config.m_page_size_log2;
     auto n_set = m_config.n_sets;
     auto n_assoc = m_config.n_associate;

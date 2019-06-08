@@ -34,11 +34,16 @@
 #include "shader.h"
 #include "visualizer.h"
 #include "gpu-sim.h"
-
+#include "page_manager.hpp"
 unsigned mem_fetch::sm_next_mf_request_uid=1;
 #ifdef TLBDEBUG
 int mem_fetch::m_nums=0;
 #endif
+void mem_fetch::reset_raw_addr(){
+
+       m_mem_config->m_address_mapping.addrdec_tlx(physic_addr, &m_raw_addr);
+
+}
 //std::unordered_map<mem_fetch*,unsigned long long> mf_map;
 mem_fetch::mem_fetch( const mem_access_t &access, 
                       const warp_inst_t *inst,
@@ -48,7 +53,8 @@ mem_fetch::mem_fetch( const mem_access_t &access,
                       unsigned tpc, 
                       const struct memory_config *config,
 					  mem_fetch *m_original_mf,
-					  mem_fetch *m_original_wr_mf):finished_tlb(false)
+					  mem_fetch *m_original_wr_mf,
+                      mem_fetch* pw_origin):finished_tlb(false),pw_origin(pw_origin)
 
 {
     #ifdef TLBDEBUG
@@ -66,8 +72,13 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    m_sid = sid;
    m_tpc = tpc;
    m_wid = wid;
-   config->m_address_mapping.addrdec_tlx(access.get_addr(),&m_raw_addr);
-   m_partition_addr = config->m_address_mapping.partition_address(access.get_addr());
+
+   virtual_addr=access.get_addr();
+   physic_addr=global_page_manager->translate(virtual_addr);
+   
+   config->m_address_mapping.addrdec_tlx(physic_addr,&m_raw_addr);
+   m_partition_addr = config->m_address_mapping.partition_address(physic_addr);
+
    m_type = m_access.is_write()?WRITE_REQUEST:READ_REQUEST;
    m_timestamp = gpu_sim_cycle + gpu_tot_sim_cycle;
    m_timestamp2 = 0;

@@ -231,7 +231,8 @@ void memory_config::reg_options(class OptionParser * opp)
 
 void shader_core_config::reg_options(class OptionParser * opp)
 {
-   m_L1TLB_config.parse_option(opp);
+   m_L1TLB_config.reg_option(opp);
+   m_L1ITLB_config.reg_option(opp);
     option_parser_register(opp, "-gpgpu_simd_model", OPT_INT32, &model, 
                    "1 = post-dominator", "1");
     option_parser_register(opp, "-gpgpu_shader_core_pipeline", OPT_CSTR, &gpgpu_shader_core_pipeline_opt, 
@@ -719,7 +720,7 @@ void gpgpu_sim::stop_all_running_kernels(){
 void set_ptx_warp_size(const struct core_config * warp_size);
 
 gpgpu_sim::gpgpu_sim( const gpgpu_sim_config &config ) 
-    : gpgpu_t(config), m_config(config),m_page_manager(std::make_shared<page_manager>()),m_l2_tlb(config.m_l2_tlb_config,m_page_manager)
+    : gpgpu_t(config), m_config(config),m_l2_tlb(config.m_l2_tlb_config)
 { 
     m_shader_config = &m_config.m_shader_config;
     m_memory_config = &m_config.m_memory_config;
@@ -1575,6 +1576,17 @@ void gpgpu_sim::cycle()
         for (unsigned i=0;i<m_memory_config->m_n_mem_sub_partition;i++) {
             mem_fetch* mf = m_memory_sub_partition[i]->top();
             if (mf) {
+               if(mf->pw_origin!=NULL){//that should be send to l2_tlb//TODO need to set mf data size and read
+                  unsigned response_size = mf->get_is_write()?mf->get_ctrl_size():mf->size();
+                  if(::icnt_has_buffer(m_shader_config->mem2device(i),response_size)){
+                     ::icnt_push(m_shader_config->mem2device(i),global_l2_tlb_index,mf,response_size);
+                     m_memory_sub_partition[i]->pop();
+                     partiton_replys_in_parallel_per_cycle++;
+
+                  }else{
+                     gpu_stall_icnt2sh++;
+                  }
+               }else{
                 unsigned response_size = mf->get_is_write()?mf->get_ctrl_size():mf->size();
                 if ( ::icnt_has_buffer( m_shader_config->mem2device(i), response_size ) ) {
                     //if (!mf->get_is_write())
@@ -1586,6 +1598,7 @@ void gpgpu_sim::cycle()
                 } else {
                     gpu_stall_icnt2sh++;
                 }
+               }
             } else {
                m_memory_sub_partition[i]->pop();
             }

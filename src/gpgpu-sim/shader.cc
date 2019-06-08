@@ -53,7 +53,8 @@
 //#define TLBDEBUG
 #define FETCHDEBUG
 #include"debug_macro.h"
-
+#include"page_manager.hpp"
+#include"l2_tlb.hpp"
 /////////////////////////////////////////////////////////////////////////////
 
 std::list<unsigned> shader_core_ctx::get_regs_written( const inst_t &fvt ) const
@@ -76,8 +77,10 @@ shader_core_ctx::shader_core_ctx( class gpgpu_sim *gpu,
                                   shader_core_stats *stats )
    : core_t( gpu, NULL, config->warp_size, config->n_thread_per_shader ),
      m_barriers( this, config->max_warps_per_shader, config->max_cta_per_core, config->max_barriers_per_cta, config->warp_size ),
-     m_dynamic_warp_id(0), m_active_warps(0)
+     m_dynamic_warp_id(0), m_active_warps(0),
+     m_l1I_tlb(new l1_tlb(config->m_L1ITLB_config,global_page_manager))
 {
+    global_n_cores=config->n_simt_clusters;
     m_cluster = cluster;
     m_config = config;
     m_memory_config = mem_config;
@@ -759,92 +762,167 @@ void shader_core_ctx::decode()
     }
 }
 
-void shader_core_ctx::fetch()
+void shader_core_ctx::fetch()//redesign for tlb/translate
 {
+   
+    if (!m_inst_fetch_buffer.m_valid)
+    {
 
-    if( !m_inst_fetch_buffer.m_valid ) {
-        if( m_L1I->access_ready() ) {
+        if (m_L1I->access_ready())//if access ready ,just get the mf and set warp
+        {
             mem_fetch *mf = m_L1I->next_access();
             m_warp[mf->get_wid()].clear_imiss_pending();
             m_inst_fetch_buffer = ifetch_buffer_t(m_warp[mf->get_wid()].get_pc(), mf->get_access_size(), mf->get_wid());
-            assert( m_warp[mf->get_wid()].get_pc() == (mf->get_addr()-PROGRAM_MEM_START)); // Verify that we got the instruction we were expecting.
+            assert(m_warp[mf->get_wid()].get_pc() == (mf->get_addr() - PROGRAM_MEM_START)); // Verify that we got the instruction we were expecting.
             m_inst_fetch_buffer.m_valid = true;
             m_warp[mf->get_wid()].set_last_fetch(gpu_sim_cycle);
             delete mf;
         }
-        else {
-            // find an active warp with space in instruction buffer that is not already waiting on a cache miss
-            // and get next 1-2 instructions from i-cache...
-            for( unsigned i=0; i < m_config->max_warps_per_shader; i++ ) {
-                unsigned warp_id = (m_last_warp_fetched+1+i) % m_config->max_warps_per_shader;
+        else//if not access ready , first choose warp to excute and access l1I_tlb, and then  to check is there any response from tlb
+        {
+            for (unsigned i = 0; i < m_config->max_warps_per_shader; i++)
+            {
+                unsigned warp_id = (m_last_warp_fetched + 1 + i) % m_config->max_warps_per_shader;
 
                 // this code checks if this warp has finished executing and can be reclaimed
-                if( m_warp[warp_id].hardware_done() && !m_scoreboard->pendingWrites(warp_id) && !m_warp[warp_id].done_exit() ) {
-                    bool did_exit=false;
-                    for( unsigned t=0; t<m_config->warp_size;t++) {
-                        unsigned tid=warp_id*m_config->warp_size+t;
-                        if( m_threadState[tid].m_active == true ) {
-                            m_threadState[tid].m_active = false; 
+                if (m_warp[warp_id].hardware_done() && !m_scoreboard->pendingWrites(warp_id) && !m_warp[warp_id].done_exit())
+                {
+                    bool did_exit = false;
+                    for (unsigned t = 0; t < m_config->warp_size; t++)
+                    {
+                        unsigned tid = warp_id * m_config->warp_size + t;
+                        if (m_threadState[tid].m_active == true)
+                        {
+                            m_threadState[tid].m_active = false;
                             unsigned cta_id = m_warp[warp_id].get_cta_id();
                             register_cta_thread_exit(cta_id, &(m_thread[tid]->get_kernel()));
                             m_not_completed -= 1;
                             m_active_threads.reset(tid);
-                            assert( m_thread[tid]!= NULL );
-                            did_exit=true;
+                            assert(m_thread[tid] != NULL);
+                            did_exit = true;
                         }
                     }
-                    if( did_exit ) 
+                    if (did_exit)
                         m_warp[warp_id].set_done_exit();
-                        --m_active_warps;
-                        assert(m_active_warps >= 0);
+                    --m_active_warps;
+                    assert(m_active_warps >= 0);
                 }
 
                 // this code fetches instructions from the i-cache or generates memory requests
-                if( !m_warp[warp_id].functional_done() && !m_warp[warp_id].imiss_pending() && m_warp[warp_id].ibuffer_empty() ) {
-                    address_type pc  = m_warp[warp_id].get_pc();
+                if (!m_warp[warp_id].functional_done() && !m_warp[warp_id].imiss_pending() && m_warp[warp_id].ibuffer_empty())
+                {
+                    address_type pc = m_warp[warp_id].get_pc();
                     address_type ppc = pc + PROGRAM_MEM_START;
-                    unsigned nbytes=16;
-                    unsigned offset_in_block = pc & (m_config->m_L1I_config.get_line_sz()-1);
-                    if( (offset_in_block+nbytes) > m_config->m_L1I_config.get_line_sz() )
-                        nbytes = (m_config->m_L1I_config.get_line_sz()-offset_in_block);
+                    unsigned nbytes = 16;
+                    unsigned offset_in_block = pc & (m_config->m_L1I_config.get_line_sz() - 1);
+                    if ((offset_in_block + nbytes) > m_config->m_L1I_config.get_line_sz())
+                        nbytes = (m_config->m_L1I_config.get_line_sz() - offset_in_block);
 
                     // TODO: replace with use of allocator
                     // mem_fetch *mf = m_mem_fetch_allocator->alloc()
-                    mem_access_t acc(INST_ACC_R,ppc,nbytes,false);
+                    mem_access_t acc(INST_ACC_R, ppc, nbytes, false);
                     mem_fetch *mf = new mem_fetch(acc,
-                            NULL/*we don't have an instruction yet*/,
-                            READ_PACKET_SIZE,
-                            warp_id,
-                            m_sid,
-                            m_tpc,
-                            m_memory_config );
-                    std::list<cache_event> events;
-                    printdbg_fetch("new mf fetch probe: mf:%llX\n",mf->get_addr());
-                    enum cache_request_status status = m_L1I->access( (new_addr_type)ppc, mf, gpu_sim_cycle+gpu_tot_sim_cycle,events);
-                    if( status == MISS ) {
-                        printdbg_fetch("fetch miss!\n");
-                        m_last_warp_fetched=warp_id;
-                        m_warp[warp_id].set_imiss_pending();
+                                                  NULL /*we don't have an instruction yet*/,
+                                                  READ_PACKET_SIZE,
+                                                  warp_id,
+                                                  m_sid,
+                                                  m_tpc,
+                                                  m_memory_config);
+
+                    //1, firt to produce tlb cache access
+                    auto result = m_l1I_tlb->access(mf, gpu_sim_cycle + gpu_tot_sim_cycle); //access tlb cache//TODO that will insert mf in outgoing set,remember to erase somewhere!
+                    assert(m_l1I_tlb->outgoing_size()<100);
+                    switch (result)
+                    {
+                    case tlb_result::hit:
+                        instruction_tlb_response_queue.push_front(mf); //if it's hit, we expect that can also hit L1I in this cycle, so we push front.
+                        assert(instruction_tlb_response_queue.size()<100);
+                    
+                        m_last_warp_fetched = warp_id;
+                        m_warp[warp_id].set_imiss_pending(); //that will keep until l1I return,may be just this cycle.
                         m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
-                    } else if( status == HIT ) {
-                        printdbg_fetch("fetch hit!\n");
-                        m_last_warp_fetched=warp_id;
-                        m_inst_fetch_buffer = ifetch_buffer_t(pc,nbytes,warp_id);
+
+                        break;
+                    case tlb_result::miss:
+                        m_last_warp_fetched = warp_id;
+                        m_warp[warp_id].set_imiss_pending(); //that will keep until l1I return,may be just this cycle.
                         m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
+                        break;
+                    case tlb_result::hit_reserved:
+                        m_last_warp_fetched = warp_id;
+                        m_warp[warp_id].set_imiss_pending(); //that will keep until l1I return,may be just this cycle.
+                        m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
+                        break;
+                    case tlb_result::resfail:
+                        m_last_warp_fetched = warp_id;
                         delete mf;
-                    } else {
-                        printdbg_fetch("fetch res fail!\n");
-                        m_last_warp_fetched=warp_id;
-                        assert( status == RESERVATION_FAIL );
-                        delete mf;
+                        break;
+                    default:
+                        throw std::runtime_error("no this status");
+
+                        //that is resfail.
+                        break;
                     }
+
+                    //second ,check tlb_response
+                    
+
                     break;
                 }
             }
+            while (!m_l1I_tlb->reponse_empty())
+            {
+                auto mf = m_l1I_tlb->get_top_response();
+                instruction_tlb_response_queue.push_back(mf);
+                assert(instruction_tlb_response_queue.size()<100);
+
+                m_l1I_tlb->pop_response();
+            }
+            if (!instruction_tlb_response_queue.empty())//get from tlb response queue and process data cache
+            {
+
+                auto nbytes = 16;
+                auto mf = instruction_tlb_response_queue.front();
+                auto warp_id = mf->get_wid();
+                std::list<cache_event> events;
+                printdbg_fetch("new mf fetch probe: mf:%llX\n", mf->get_addr());
+                auto ppc = mf->get_physic_addr();
+                auto pc = ppc - PROGRAM_MEM_START;
+
+                enum cache_request_status status = m_L1I->access((new_addr_type)ppc, mf, gpu_sim_cycle + gpu_tot_sim_cycle, events);
+                if (status == MISS)
+                {
+                    printdbg_fetch("fetch miss!\n");
+                    //m_last_warp_fetched = warp_id;//it is decided in tlb access above
+                    m_warp[warp_id].set_imiss_pending();
+                    m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
+                    instruction_tlb_response_queue.pop_front();
+                }
+                else if (status == HIT)
+                {
+                    printdbg_fetch("fetch hit!\n");
+                    //m_last_warp_fetched = warp_id;
+                    m_inst_fetch_buffer = ifetch_buffer_t(pc, nbytes, warp_id);
+                    m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
+                    instruction_tlb_response_queue.pop_front();
+
+                    delete mf;
+                }
+                else
+                {
+                    printdbg_fetch("fetch res fail!\n");
+                    //m_last_warp_fetched = warp_id;
+                    assert(status == RESERVATION_FAIL);
+                    //delete mf; don't delete, it's still in the response queue
+                }
+                //break;
+            }
+            
         }
     }
 
-    m_L1I->cycle();
+    m_L1I->cycle(); //send to next level
+    m_l1I_tlb->cycle();
 }
 
 void shader_core_ctx::func_exec_inst( warp_inst_t &inst )
@@ -2100,7 +2178,7 @@ ldst_unit::ldst_unit( mem_fetch_interface *icnt,
                       unsigned sid,
                       unsigned tpc ) : pipelined_simd_unit(NULL,config,config->smem_latency,core), 
                       m_next_wb(config),
-                      m_l1_tlb(new l1_tlb(config->m_L1TLB_config,std::unique_ptr<page_manager>(new page_manager())))
+                      m_l1_tlb(new l1_tlb(config->m_L1TLB_config,global_page_manager))
 {
 	assert(config->smem_latency > 1);
     init( icnt,
@@ -2386,6 +2464,7 @@ void ldst_unit::cycle()
        printdbg_tlb("access from icnt,mf:%llX\n",mf->get_addr());
        if (m_l1_tlb->is_outgoing(mf)) //this is a tlb_resquest
        {
+           assert(!mf->finished_tlb);
            printdbg_tlb("m_l1_tlb accept this mf:%llX\n",mf->get_addr());
            m_l1_tlb->del_outgoing(mf);
            //mf will fill the l1 tlb cache, and return to tlb_response queue;
@@ -2401,6 +2480,7 @@ void ldst_unit::cycle()
        }
        else
        {
+           assert(mf->finished_tlb);
            printdbg_tlb("l1D access this mf:%llX\n",mf->get_addr());
 
            if (mf->get_access_type() == TEXTURE_ACC_R)
@@ -4041,16 +4121,30 @@ void simt_core_cluster::icnt_cycle()
         unsigned cid = m_config->sid_to_cid(mf->get_sid());
         if( mf->get_access_type() == INST_ACC_R ) {
             // instruction fetch response
-            if( !m_core[cid]->fetch_unit_response_buffer_full() ) {
+            if (mf->finished_tlb)
+            {
+                assert(!m_core[cid]->m_l1I_tlb->is_outgoing(mf));
+                
+                if (!m_core[cid]->fetch_unit_response_buffer_full())//that always be false
+                {
+                    m_response_fifo.pop_front();
+                    m_core[cid]->accept_fetch_response(mf);
+                }
+            }else
+            {
+                assert(m_core[cid]->m_l1I_tlb->is_outgoing(mf));
+                m_core[cid]->m_l1I_tlb->del_outgoing(mf);
                 m_response_fifo.pop_front();
-                m_core[cid]->accept_fetch_response(mf);
+                mf->finished_tlb=true;
+                m_core[cid]->m_l1I_tlb->fill(mf,gpu_sim_cycle+gpu_tot_sim_cycle);
             }
+            
         } else {
             // data response
             if( !m_core[cid]->ldst_unit_response_buffer_full() ) {
                 m_response_fifo.pop_front();
                 m_memory_stats->memlatstat_read_done(mf);
-                m_core[cid]->accept_ldst_unit_response(mf);
+                m_core[cid]->accept_ldst_unit_response(mf);//push to ldst queue, then we recognice the tlb traffic and the data traffic.
             }
         }
     }

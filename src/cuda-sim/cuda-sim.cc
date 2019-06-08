@@ -25,9 +25,9 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+#include"../gpgpu-sim/page_manager.hpp"
 #include "cuda-sim.h"
-
+#include"../gpgpu-sim/l2_tlb.hpp"
 #include "instructions.h"
 #include "ptx_ir.h"
 #include "ptx.tab.h"
@@ -409,10 +409,10 @@ addr_t generic_to_global( addr_t addr )
    return addr;
 }
 
-
 void* gpgpu_t::gpu_malloc( size_t size )
 {
-   unsigned long long result = m_dev_malloc;
+   auto result=global_page_manager->cudaMalloc(size);//return virtual address 
+   //unsigned long long result = m_dev_malloc;
    if(g_debug_execution >= 3) {
       printf("GPGPU-Sim PTX: allocating %zu bytes on GPU starting at address 0x%Lx\n", size, m_dev_malloc );
       fflush(stdout);
@@ -424,7 +424,8 @@ void* gpgpu_t::gpu_malloc( size_t size )
 
 void* gpgpu_t::gpu_mallocarray( size_t size )
 {
-   unsigned long long result = m_dev_malloc;
+   //unsigned long long result = m_dev_malloc;
+   auto result=global_page_manager->cudaMalloc(size);
    if(g_debug_execution >= 3) {
       printf("GPGPU-Sim PTX: allocating %zu bytes on GPU starting at address 0x%Lx\n", size, m_dev_malloc );
       fflush(stdout);

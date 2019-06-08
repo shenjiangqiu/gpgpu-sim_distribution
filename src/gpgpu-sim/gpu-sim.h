@@ -311,7 +311,9 @@ public:
         ptx_set_tex_cache_linesize(m_shader_config.m_L1T_config.get_line_sz());
         m_memory_config.init();
         m_l2_tlb_config.init();
+        
         m_shader_config.m_L1TLB_config.m_icnt_index=m_shader_config.n_simt_clusters+m_memory_config.m_n_mem_sub_partition;//need TODO
+        m_shader_config.m_L1ITLB_config.m_icnt_index=m_shader_config.n_simt_clusters+m_memory_config.m_n_mem_sub_partition;
         m_l2_tlb_config.set_icnt_index(m_shader_config.m_L1TLB_config.m_icnt_index);
         init_clock_domains(); 
         power_config::init();
@@ -564,7 +566,7 @@ private:
 
 
 public:
-    std::shared_ptr<page_manager> m_page_manager;
+    //std::shared_ptr<page_manager> m_page_manager;
     l2_tlb m_l2_tlb;
    unsigned long long  gpu_sim_insn;
    unsigned long long  gpu_tot_sim_insn;

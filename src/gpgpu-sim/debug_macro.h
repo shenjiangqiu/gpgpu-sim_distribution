@@ -14,7 +14,7 @@ extern unsigned long long gpu_tot_sim_cycle;
 #define printdbg_tlb(...) \
     printdbg(__VA_ARGS__)
 #else
-#define printdbg_tlb(...)
+#define printdbg_tlb(...) void(0)
 #endif
 
 #ifdef FETCHDEBUG
@@ -24,5 +24,5 @@ extern unsigned long long gpu_tot_sim_cycle;
 #define printdbg_fetch(...) \
     printdbg(__VA_ARGS__)
 #else
-#define printdbg_fetch(...)
+#define printdbg_fetch(...) void(0)
 #endif

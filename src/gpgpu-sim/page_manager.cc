@@ -3,18 +3,21 @@
 #include <assert.h>
 //range
 
-page_manager* global_page_manager;
+page_manager *global_page_manager;
 
-class global_page_manager_init{
-    public:
-    global_page_manager_init(){
-        global_page_manager=new page_manager();
+class global_page_manager_init
+{
+public:
+    global_page_manager_init()
+    {
+        global_page_manager = new page_manager();
     }
-
 };
 global_page_manager_init m_global_page_manager_init;
-
-
+void range::set_end(addr_type end)
+{
+    this->end = end;
+}
 range::range() : start(0), end(0) {}
 range::range(addr_type start, addr_type end) : start(start), end(end) {}
 bool range::equel_size(const range &other) const
@@ -66,7 +69,6 @@ std::ostream &operator<<(std::ostream &out, const range_set_compare_by_size &fre
 
 //stream end
 
-
 //page_manager start
 page_manager::page_manager(/* args */) : virtual_to_physic(),
                                          physic_to_virtual(),
@@ -80,7 +82,7 @@ page_manager::page_manager(/* args */) : virtual_to_physic(),
                                          root(nullptr)
 {
     virtual_free_ranges.insert(range(virtual_start, virtual_end));
-    physic_free_ranges.insert(range(physic_start,physic_end));
+    physic_free_ranges.insert(range(physic_start, physic_end));
     page_table_ranges_free.insert(range(pagetable_start, pagetable_end));
 }
 
@@ -88,18 +90,22 @@ page_manager::~page_manager()
 {
     delete root;
 }
-addr_type page_manager::translate(addr_type virtual_addr){
+addr_type page_manager::translate(addr_type virtual_addr)
+{
 
-    auto page_id=virtual_addr & ~(4095ull);
-    auto it=virtual_to_physic.find(page_id);
-    if(it!=virtual_to_physic.end()){
+    auto page_id = virtual_addr & ~(4095ull);
+    auto it = virtual_to_physic.find(page_id);
+    if (it != virtual_to_physic.end())
+    {
         return it->second;
-    }else{
+    }
+    else
+    {
         //this address is not from malloc. maybe a instruction addr.
-        auto physic_page=get_valid_physic_page();
-        add_page_table(page_id,physic_page);
-        virtual_to_physic[page_id]=physic_page;
-        physic_to_virtual[physic_page]=page_id;
+        auto physic_page = get_valid_physic_page();
+        add_page_table(page_id, physic_page);
+        virtual_to_physic[page_id] = physic_page;
+        physic_to_virtual[physic_page] = page_id;
     }
 }
 
@@ -107,7 +113,6 @@ addr_type page_manager::translate(addr_type virtual_addr){
 {
     return origin;
 } */
-
 
 void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
 {
@@ -126,7 +131,6 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
         {
             new_range = this_range;
             virtual_free_ranges.erase(it);
-
         }
         else
         {
@@ -134,7 +138,6 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
             virtual_free_ranges.erase(it);
             virtual_free_ranges.insert(new_range);
         }
-        
     }
     else //can't find free range
     {
@@ -148,17 +151,21 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
     auto new_it = ret.first;
 
     addr_type first_page = new_range.get_start() & ~4095ull; // addr/4096
-    addr_type last_page = (new_range.get_end() - 1) & ~4095ull ;
-    auto prev_range=std::prev(new_it);
-    auto after_range=std::next(new_it);
-    if(prev_range!=virtual_used_ranges.end()){
-        if(prev_range->get_end()>first_page){//if end=4097 first page=4096. OK, if end=4096, it belongs to prev page;
-            first_page+=4096;
+    addr_type last_page = (new_range.get_end() - 1) & ~4095ull;
+    auto prev_range = std::prev(new_it);
+    auto after_range = std::next(new_it);
+    if (prev_range != virtual_used_ranges.end())
+    {
+        if (prev_range->get_end() > first_page)
+        { //if end=4097 first page=4096. OK, if end=4096, it belongs to prev page;
+            first_page += 4096;
         }
     }
-    if(after_range!=virtual_used_ranges.end()){
-        if(after_range->get_start()< last_page+4096){ //if last page=4096 4096~4096+4095's start point is covered
-            last_page-=4096;
+    if (after_range != virtual_used_ranges.end())
+    {
+        if (after_range->get_start() < last_page + 4096)
+        { //if last page=4096 4096~4096+4095's start point is covered
+            last_page -= 4096;
         }
     }
     if (first_page <= last_page)
@@ -166,24 +173,20 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
         allocate_page(first_page, last_page - first_page + 1); //find out physic pages.
     }
 
-
-
     return (void *)new_range.get_start();
 }
 
-
 void page_manager::allocate_page(addr_type first_page, size_t size)
 {
-    for (auto i = 0; i < size ; i++)
+    for (auto i = 0; i < size; i++)
     {
-        auto vpn=first_page+i*4096;
+        auto vpn = first_page + i * 4096;
         auto physic_page_number = get_valid_physic_page();
         add_page_table(vpn, physic_page_number);
-        virtual_to_physic[vpn]=physic_page_number;
-        physic_to_virtual[physic_page_number]=vpn;
+        virtual_to_physic[vpn] = physic_page_number;
+        physic_to_virtual[physic_page_number] = vpn;
     }
 }
-
 
 addr_type page_manager::get_valid_physic_page()
 {
@@ -247,35 +250,40 @@ void page_manager::add_page_table(addr_type virtual_page_number, addr_type physi
     root->add_page_table_entry(virtual_page_number, physic_page_number);
 }
 
-page_table *page_manager::creat_new_page_table(page_table_level level){
-    auto physic_addr=get_valid_physic_page();
-    return new page_table(level,physic_addr,this);
-
+page_table *page_manager::creat_new_page_table(page_table_level level)
+{
+    auto physic_addr = get_valid_physic_page();
+    return new page_table(level, physic_addr, this);
+}
+addr_type page_manager::get_pagetable_physic_addr(addr_type virtual_addr, page_table_level level)
+{
+    return root->get_physic_addr(virtual_addr, level);
 }
 //page_manager end
-std::set<unsigned short> all_free_set;//only init once
-class build_all_free_set{
-    public:
-    build_all_free_set(){
-        for(unsigned short i=0;i<512;i++){
+std::set<unsigned short> all_free_set; //only init once
+class build_all_free_set
+{
+public:
+    build_all_free_set()
+    {
+        for (unsigned short i = 0; i < 512; i++)
+        {
             all_free_set.insert(i);
         }
     }
 };
-build_all_free_set m_build;//to init all_free_set;
+build_all_free_set m_build; //to init all_free_set;
 
 //page table start
-page_table::page_table(page_table_level level, addr_type physic_addr,page_manager* m_page_manager):
-    m_page_manager(m_page_manager),
-    valid_entries(all_free_set),
-    m_level(level),
-    entries(512,nullptr),
-    m_mask(masks[(unsigned int)level]),
-    num_entries(0),
-    m_physic_address(physic_addr),
-    offset(12+9*(3-(unsigned int)level)) 
+page_table::page_table(page_table_level level, addr_type physic_addr, page_manager *m_page_manager) : m_page_manager(m_page_manager),
+                                                                                                      valid_entries(all_free_set),
+                                                                                                      m_level(level),
+                                                                                                      entries(512, nullptr),
+                                                                                                      m_mask(masks[(unsigned int)level]),
+                                                                                                      num_entries(0),
+                                                                                                      m_physic_address(physic_addr),
+                                                                                                      offset(12 + 9 * (3 - (unsigned int)level))
 {
-
 }
 void page_table::add_page_table_entry(addr_type virtual_page_number, addr_type physic_page_number)
 {
@@ -294,26 +302,29 @@ void page_table::add_page_table_entry(addr_type virtual_page_number, addr_type p
         if (entries[index] == nullptr)
         {
             entries[index] = m_page_manager->creat_new_page_table(get_next_level(m_level));
-            entries[index]->add_page_table_entry(virtual_page_number,physic_page_number);
+            entries[index]->add_page_table_entry(virtual_page_number, physic_page_number);
             return;
-        }else
-        {
-            entries[index]->add_page_table_entry(virtual_page_number,physic_page_number);
         }
-        
+        else
+        {
+            entries[index]->add_page_table_entry(virtual_page_number, physic_page_number);
+        }
     }
 }
 
-unsigned short page_table::get_m_index(addr_type virtual_addr){
-    return (unsigned short ) (virtual_addr&m_mask)>>offset;
+unsigned short page_table::get_m_index(addr_type virtual_addr)
+{
+    return (unsigned short)(virtual_addr & m_mask) >> offset;
 }
 
-
-page_table_level get_next_level(page_table_level this_level){
-    if(this_level==page_table_level::L1_LEAF){
+page_table_level get_next_level(page_table_level this_level)
+{
+    if (this_level == page_table_level::L1_LEAF)
+    {
         throw std::runtime_error("no next level for L1");
-    }else{
-        return static_cast<page_table_level>(static_cast<unsigned>(this_level)+1);
     }
-
+    else
+    {
+        return static_cast<page_table_level>(static_cast<unsigned>(this_level) + 1);
+    }
 }
