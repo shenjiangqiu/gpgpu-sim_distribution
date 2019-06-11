@@ -164,10 +164,55 @@ void real_page_table_walker::cycle()
         { //send leaf access to l2 cache
             miss_queue.push(mf);
             std::get<2>(working_walker[mf]) = true;
+            ready_to_send.pop();
         }
         else
         {
-            auto result = access(mf);
+            auto result = access(mf); //that will chage the status of working worker//that will access the cache
+            switch (result)
+            {
+            case tlb_result::hit:
+            {
+                auto &target_status = working_walker[mf];
+                auto current_level = std::get<0>(target_status);
+                std::get<0>(target_status) = get_next_level(current_level);
+
+                delete std::get<1>(target_status);
+                auto next_mf = new mem_fetch(*mf);
+                next_mf->m_data_size = 128;
+                next_mf->m_type = READ_REQUEST;
+
+                next_mf->pw_origin = mf;
+                assert(next_mf->get_is_write() == false);
+                auto page_table_addr = global_page_manager->get_pagetable_physic_addr(mf->get_virtual_addr(), get_next_level(current_level));
+
+                next_mf->physic_addr = page_table_addr & (~(128 - 1));
+                next_mf->reset_raw_addr();
+                std::get<1>(target_status) = next_mf;
+                response_queue.pop();
+                response_queue.push(mf);
+                break;
+            }
+            case tlb_result::hit_reserved:
+            {
+                std::get<2>(working_walker[mf]) = true; //it's on_going;
+                response_queue.pop();
+                break;
+            }
+            case tlb_result::miss:
+            {
+                assert(std::get<2>(working_walker[mf]) == false);
+                std::get<2>(working_walker[mf]) = true;
+                response_queue.pop();
+                break;
+            }
+            case tlb_result::resfail:
+                //do nothing
+                break;
+            default:
+
+                break;
+            }
         }
     }
     if (!miss_queue.empty())
@@ -183,34 +228,44 @@ void real_page_table_walker::cycle()
         }
     }
     //start to recv from icnt//TODO change l2 icnt push decition
-    auto child_mf = static_cast<mem_fetch *>(::icnt_pop(global_l2_tlb_index));
-    auto mf_origin = child_mf->pw_origin;
-    auto status = working_walker[mf_origin];
-    auto &level = std::get<0>(status); //attention! it's reference not copy!!!
-    delete child_mf;
-    if (level == page_table_level::L1_LEAF)
+    //auto child_mf = static_cast<mem_fetch *>(::icnt_pop(global_l2_tlb_index));
+    if (!icnt_response_buffer.empty())
     {
-        working_walker.erase(mf_origin);
-        response_queue.push(mf_origin);
-    }
-    else
-    {
-        //it is not the last level, we need keep going.
-        //1,change working status,to next level, to next mf, and not outgoing
-        level = get_next_level(level); //change to next level,1
-        auto next_mf = new mem_fetch(*mf_origin);
-        next_mf->m_data_size = 128; //cache line
-        next_mf->m_type = READ_REQUEST;
+        auto child_mf = icnt_response_buffer.front();
+        icnt_response_buffer.pop();
+        if (child_mf)
+        {
 
-        next_mf->pw_origin = mf_origin;
-        auto page_table_addr = global_page_manager->get_pagetable_physic_addr(mf_origin->get_virtual_addr(), level);
+            auto mf_origin = child_mf->pw_origin;
+            assert(mf_origin != NULL);
+            auto status = working_walker[mf_origin];
+            auto &level = std::get<0>(status); //attention! it's reference not copy!!!
+            delete child_mf;
+            if (level == page_table_level::L1_LEAF)
+            {
+                working_walker.erase(mf_origin);
+                response_queue.push(mf_origin);
+            }
+            else
+            {
+                //it is not the last level, we need keep going.
+                //1,change working status,to next level, to next mf, and not outgoing
+                level = get_next_level(level); //change to next level,1
+                auto next_mf = new mem_fetch(*mf_origin);
+                next_mf->m_data_size = 128; //cache line
+                next_mf->m_type = READ_REQUEST;
 
-        next_mf->physic_addr = page_table_addr & (~(128 - 1));
-        next_mf->reset_raw_addr();
-        std::get<1>(status) = next_mf; //set next mf;/2
-        assert(std::get<2>(status) == true);
-        std::get<2>(status) = false; //set next outgoing bit/3
-        ready_to_send.push(mf_origin);
+                next_mf->pw_origin = mf_origin;
+                auto page_table_addr = global_page_manager->get_pagetable_physic_addr(mf_origin->get_virtual_addr(), level);
+
+                next_mf->physic_addr = page_table_addr & (~(128 - 1));
+                next_mf->reset_raw_addr();
+                std::get<1>(status) = next_mf; //set next mf;/2
+                assert(std::get<2>(status) == true);
+                std::get<2>(status) = false; //set next outgoing bit/3
+                ready_to_send.push(mf_origin);
+            }
+        }
     }
 }
 
@@ -272,9 +327,9 @@ tlb_result real_page_table_walker::access(mem_fetch *mf)
                         {
                             printdbg_tlb("hit reserved! add to mfshr\n");
 
-                            m_mshr->add<2>(block_addr, mf);         //not new
-                            std::get<2>(working_walker[mf]) = true; //it's on_going;
-                            ready_to_send.pop();
+                            m_mshr->add<2>(block_addr, mf); //not new
+
+                            //ready_to_send.pop();
                             (*start)->set_last_access_time(time, mask);
                             return tlb_result::hit_reserved;
                         }
@@ -283,33 +338,7 @@ tlb_result real_page_table_walker::access(mem_fetch *mf)
                     case VALID:
                     {
                         printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
-                        auto &target_status = working_walker[mf];
-                        auto current_level = std::get<0>(target_status);
 
-                        if (current_level != page_table_level::L1_LEAF)
-                        {
-                            std::get<0>(target_status) = get_next_level(current_level);
-
-                            delete std::get<1>(target_status);
-                            auto next_mf = new mem_fetch(*mf);
-                            next_mf->m_data_size = 128;
-                            next_mf->m_type = READ_REQUEST;
-
-                            next_mf->pw_origin = mf;
-                            assert(next_mf->get_is_write() == false);
-                            auto page_table_addr = global_page_manager->get_pagetable_physic_addr(mf->get_virtual_addr(), get_next_level(current_level));
-
-                            next_mf->physic_addr = page_table_addr & (~(128 - 1));
-                            next_mf->reset_raw_addr();
-                            std::get<1>(target_status) = next_mf;
-                            ready_to_send.pop();
-                            ready_to_send.push(mf);
-                            //bool position remains.
-                        }
-                        else
-                        {
-                            throw std::runtime_error("leaf access shouldn't reach here");
-                        }
                         return tlb_result::hit;
                         break;
                     }
@@ -347,9 +376,8 @@ tlb_result real_page_table_walker::access(mem_fetch *mf)
         m_mshr->add<1>(block_addr, mf);
         miss_queue.push(mf);
         assert(miss_queue.size() < 10);
-        ready_to_send.pop();
-        assert(std::get<2>(working_walker[mf]) == false);
-        std::get<2>(working_walker[mf]) = true;
+        //ready_to_send.pop();
+
         //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
         return tlb_result::miss;
     }

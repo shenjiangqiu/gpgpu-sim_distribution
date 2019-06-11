@@ -16,6 +16,8 @@ public:
     //virtual bool recv_ready();
     virtual mem_fetch *recv() = 0;             //recv and pop;
     virtual mem_fetch *recv_probe() const = 0; //recv not
+    virtual void send_to_recv_buffer(mem_fetch* mf)=0;
+
 };
 class latency_queue
 {
@@ -75,7 +77,9 @@ public:
     virtual mem_fetch *recv() override;             //recv and pop override;
     virtual mem_fetch *recv_probe() const override; //recv not
     tlb_result access(mem_fetch *mf);
-
+    virtual void send_to_recv_buffer(mem_fetch* mf){
+        icnt_response_buffer.push(mf);
+    }
 private:
     page_table_walker_config m_config;
     std::vector<std::shared_ptr<cache_block_t>> m_tag_arrays;

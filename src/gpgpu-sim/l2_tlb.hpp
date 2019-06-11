@@ -69,6 +69,7 @@ class l2_tlb{
     std::deque<mem_fetch*>  m_response_queue;
     std::unordered_set<mem_fetch*> outgoing_mf;//we do not use multiple set
     std::queue<mem_fetch*> m_recv_buffer;
+
 };
 
 #endif

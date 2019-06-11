@@ -226,13 +226,17 @@ void l2_tlb::cycle()
         }
     }
     mem_fetch *mf = nullptr;
-    if (m_recv_buffer.size() < m_config.recv_buffer_size)
+    if (m_recv_buffer.size() < m_config.recv_buffer_size)//recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
     {
         mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
         if (mf)
         {
+            if(mf->pw_origin!=NULL){//it's a pw resquest
+                m_page_table_walker->send_to_recv_buffer(mf);
+            }else{
             printdbg_tlb("get mf from icnt!access mf:%llX\n", mf->get_virtual_addr());
             m_recv_buffer.push(mf);
+            }
         }
     }
     else

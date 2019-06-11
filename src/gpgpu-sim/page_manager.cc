@@ -92,12 +92,13 @@ page_manager::~page_manager()
 }
 addr_type page_manager::translate(addr_type virtual_addr)
 {
+    auto offset=virtual_addr%4096;
 
     auto page_id = virtual_addr & ~(4095ull);
     auto it = virtual_to_physic.find(page_id);
     if (it != virtual_to_physic.end())
     {
-        return it->second;
+        return it->second+offset;
     }
     else
     {
@@ -106,6 +107,7 @@ addr_type page_manager::translate(addr_type virtual_addr)
         add_page_table(page_id, physic_page);
         virtual_to_physic[page_id] = physic_page;
         physic_to_virtual[physic_page] = page_id;
+        return physic_page+offset;//fix bug of offset
     }
 }
 
@@ -135,8 +137,9 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
         else
         {
             new_range = range(this_range.get_start(), this_range.get_start() + size);
+            auto replace_range_to_insert=range(this_range.get_start()+size,this_range.get_end());
             virtual_free_ranges.erase(it);
-            virtual_free_ranges.insert(new_range);
+            virtual_free_ranges.insert(replace_range_to_insert);//fix bug , insert the remaining page,not this one!!
         }
     }
     else //can't find free range
@@ -154,7 +157,7 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
     addr_type last_page = (new_range.get_end() - 1) & ~4095ull;
     auto prev_range = std::prev(new_it);
     auto after_range = std::next(new_it);
-    if (prev_range != virtual_used_ranges.end())
+    if (new_it!=virtual_used_ranges.begin())
     {
         if (prev_range->get_end() > first_page)
         { //if end=4097 first page=4096. OK, if end=4096, it belongs to prev page;
@@ -170,7 +173,8 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
     }
     if (first_page <= last_page)
     {
-        allocate_page(first_page, last_page - first_page + 1); //find out physic pages.
+        assert(((last_page-first_page)&4095)==0 );
+        allocate_page(first_page, ((last_page - first_page)>>12) + 1); //find out physic pages.
     }
 
     return (void *)new_range.get_start();
@@ -178,7 +182,7 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
 
 void page_manager::allocate_page(addr_type first_page, size_t size)
 {
-    for (auto i = 0; i < size; i++)
+    for (unsigned i = 0; i < size; i++)
     {
         auto vpn = first_page + i * 4096;
         auto physic_page_number = get_valid_physic_page();
@@ -314,7 +318,7 @@ void page_table::add_page_table_entry(addr_type virtual_page_number, addr_type p
 
 unsigned short page_table::get_m_index(addr_type virtual_addr)
 {
-    return (unsigned short)(virtual_addr & m_mask) >> offset;
+    return (unsigned short)((virtual_addr & m_mask) >> offset);//fix bug of trunk the bit
 }
 
 page_table_level get_next_level(page_table_level this_level)
