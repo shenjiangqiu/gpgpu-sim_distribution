@@ -81,6 +81,7 @@ public:
         icnt_response_buffer.push(mf);
     }
 private:
+    void fill(mem_fetch* mf);//fill pw cache;
     page_table_walker_config m_config;
     std::vector<std::shared_ptr<cache_block_t>> m_tag_arrays;
     mshr_table *m_mshr;

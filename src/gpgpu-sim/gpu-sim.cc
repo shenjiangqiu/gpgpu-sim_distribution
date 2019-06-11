@@ -1627,6 +1627,8 @@ void gpgpu_sim::cycle()
           if ( m_memory_sub_partition[i]->full(SECTOR_CHUNCK_SIZE) ) {
              gpu_stall_dramfull++;
           } else {
+             auto output=m_shader_config->mem2device(i);
+             
               mem_fetch* mf = (mem_fetch*) icnt_pop( m_shader_config->mem2device(i) );
               m_memory_sub_partition[i]->push( mf, gpu_sim_cycle + gpu_tot_sim_cycle );
               if(mf)

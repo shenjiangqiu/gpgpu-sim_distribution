@@ -134,6 +134,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                     case VALID:
                         printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+                        assert(m_response_queue.size()<20);
                         return tlb_result::hit;
 
                         break;
@@ -165,6 +166,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
         (*next_line)->allocate(tag, block_addr, time, mask);
         m_mshrs->add<1>(block_addr, mf);
         m_miss_queue.push_back(mf);
+        assert(m_miss_queue.size()<10);
         outgoing_mf.insert(mf);
         printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
         return tlb_result::miss;
@@ -184,7 +186,7 @@ void l2_tlb::cycle()
     { //from response queue to icnt
         auto mf = m_response_queue.front();
         printdbg_tlb("send mf:%llX, to icnt\n", mf->get_virtual_addr());
-        auto size = 8+8;//ctrl size plus one tlb targe address
+        auto size = 8;//ctrl size plus one tlb targe address
         if (::icnt_has_buffer(m_config.m_icnt_index, size))
         {
             ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
@@ -200,6 +202,7 @@ void l2_tlb::cycle()
     {                               //push all the ready access to response Queue
         printdbg_tlb("send m_mshr next access to m response queue\n");
         m_response_queue.push_back(m_mshrs->next_access());
+        assert(m_response_queue.size()<100);
         printdbg_tlb("the mf is:%llX\n", m_response_queue.back()->get_addr());
     }
     while (m_page_table_walker->ready())
