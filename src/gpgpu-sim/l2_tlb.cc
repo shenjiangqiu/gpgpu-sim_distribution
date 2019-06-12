@@ -12,6 +12,7 @@ using std::endl;
 
 unsigned global_l2_tlb_index;
 unsigned global_n_cores;
+unsigned global_walkers;
 l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
                                        m_page_table_walker(new real_page_table_walker(config.m_page_table_walker_config)),
                                        m_page_manager(global_page_manager),
@@ -23,6 +24,7 @@ l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
         m_tag_arrays[i] = std::make_shared<line_cache_block>();
     }
     global_l2_tlb_index=m_config.m_icnt_index;
+    global_walkers=m_config.m_page_table_walker_config.walker_size;
 }
 l2_tlb_config::l2_tlb_config() {} //in constructor, just allocate the memory, and then parse configur,then
 

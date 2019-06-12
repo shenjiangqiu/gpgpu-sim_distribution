@@ -14,6 +14,7 @@
 extern unsigned global_n_cores;
 
 extern unsigned global_l2_tlb_index;
+extern unsigned global_walkers;
 class l2_tlb_config{
     public:
     l2_tlb_config();
