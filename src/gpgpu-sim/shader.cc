@@ -52,6 +52,7 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 //#define TLBDEBUG
 #define FETCHDEBUG
+#define PWDEBUG
 #include"debug_macro.h"
 #include"page_manager.hpp"
 #include"l2_tlb.hpp"
@@ -773,7 +774,7 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
             mem_fetch *mf = m_L1I->next_access();
             m_warp[mf->get_wid()].clear_imiss_pending();
             m_inst_fetch_buffer = ifetch_buffer_t(m_warp[mf->get_wid()].get_pc(), mf->get_access_size(), mf->get_wid());
-            assert(m_warp[mf->get_wid()].get_pc() == (mf->get_addr() - PROGRAM_MEM_START)); // Verify that we got the instruction we were expecting.
+            assert(m_warp[mf->get_wid()].get_pc() == (mf->get_virtual_addr() - PROGRAM_MEM_START)); // Verify that we got the instruction we were expecting.
             m_inst_fetch_buffer.m_valid = true;
             m_warp[mf->get_wid()].set_last_fetch(gpu_sim_cycle);
             delete mf;
@@ -831,11 +832,28 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
 
                     //1, firt to produce tlb cache access
                     auto result = m_l1I_tlb->access(mf, gpu_sim_cycle + gpu_tot_sim_cycle); //access tlb cache//TODO that will insert mf in outgoing set,remember to erase somewhere!
+                    /*
+                        Author: Jiangqiu Shen
+                        Date: June 17 2019
+                        the access function will change mshr, miss queue, and response queue. 
+                        fix bug: at hit, don't directly push to instruction queue, that will insert twice;
+                     */
+                    
+                    
                     assert(m_l1I_tlb->outgoing_size()<100);
                     switch (result)
                     {
                     case tlb_result::hit:
-                        instruction_tlb_response_queue.push_front(mf); //if it's hit, we expect that can also hit L1I in this cycle, so we push front.
+                        mf->is_in_response_queue=true;
+                        //instruction_tlb_response_queue.push_front(mf); //if it's hit, we expect that can also hit L1I in this cycle, so we push front.
+                        for (auto inside : instruction_tlb_response_queue)
+                        {
+                            printdbg_PW("core:%lu,cycle:%llu,%llx,%lx\n", get_sid(), gpu_sim_cycle + gpu_tot_sim_cycle, inside->get_virtual_addr(), inside->magic_number);
+                        }
+                        fflush(stdout);
+                        fflush(stderr);
+                        printdbg_PW("push mf: %llx\n",instruction_tlb_response_queue.front());
+                        assert(instruction_tlb_response_queue.front()->magic_number==0x12341234);
                         assert(instruction_tlb_response_queue.size()<100);
                     
                         m_last_warp_fetched = warp_id;
@@ -873,7 +891,16 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
             while (!m_l1I_tlb->reponse_empty())
             {
                 auto mf = m_l1I_tlb->get_top_response();
+                mf->is_in_response_queue=true;
                 instruction_tlb_response_queue.push_back(mf);
+                for (auto inside : instruction_tlb_response_queue)
+                {
+                    printdbg_PW("core:%lu,cycle:%llu,%llx,%lx\n", get_sid(), gpu_sim_cycle + gpu_tot_sim_cycle, inside->get_virtual_addr(), inside->magic_number);
+                }
+                fflush(stdout);
+                printdbg_PW("push mf:%llx\n",mf);
+                assert(mf->magic_number == 0x12341234);
+
                 assert(instruction_tlb_response_queue.size()<100);
 
                 m_l1I_tlb->pop_response();
@@ -882,20 +909,23 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
             {
 
                 auto nbytes = 16;
-                auto mf = instruction_tlb_response_queue.front();
-                auto warp_id = mf->get_wid();
+                auto tlb_mf = instruction_tlb_response_queue.front();
+                 assert(tlb_mf->magic_number==0x12341234);
+                 //debugs
+                auto warp_id = tlb_mf->get_wid();
                 std::list<cache_event> events;
-                printdbg_fetch("new mf fetch probe: mf:%llX\n", mf->get_addr());
-                auto ppc = mf->get_physic_addr();
+                printdbg_fetch("new tlb_mf fetch probe: tlb_mf:%llX\n", tlb_mf->get_addr());
+                auto ppc = tlb_mf->get_physic_addr();
                 auto pc = ppc - PROGRAM_MEM_START;
 
-                enum cache_request_status status = m_L1I->access((new_addr_type)ppc, mf, gpu_sim_cycle + gpu_tot_sim_cycle, events);
+                enum cache_request_status status = m_L1I->access((new_addr_type)ppc, tlb_mf, gpu_sim_cycle + gpu_tot_sim_cycle, events);
                 if (status == MISS)
                 {
                     printdbg_fetch("fetch miss!\n");
                     //m_last_warp_fetched = warp_id;//it is decided in tlb access above
                     m_warp[warp_id].set_imiss_pending();
                     m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
+                    tlb_mf->is_in_response_queue=false;
                     instruction_tlb_response_queue.pop_front();
                 }
                 else if (status == HIT)
@@ -905,8 +935,8 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
                     m_inst_fetch_buffer = ifetch_buffer_t(pc, nbytes, warp_id);
                     m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
                     instruction_tlb_response_queue.pop_front();
-
-                    delete mf;
+                    tlb_mf->is_in_response_queue=false;
+                    delete tlb_mf;
                 }
                 else
                 {
@@ -3195,6 +3225,11 @@ unsigned int shader_core_config::max_cta( const kernel_info_t &k ) const
 
 void shader_core_ctx::cycle()
 {
+    if(instruction_tlb_response_queue.size()>0)
+        printdbg_PW("tlb_reponse_queue.size:%lu, top mf:%llx, mf.magic_number:%x,core id:%u\n",instruction_tlb_response_queue.size(),instruction_tlb_response_queue.front(),instruction_tlb_response_queue.front()->magic_number,this->get_sid());
+    else{
+        printdbg_PW("tlb_response_queue size :0,core id:%u\n",this->get_sid());
+    }
 	m_stats->shader_cycles[m_sid]++;
     writeback();
     execute();
@@ -4108,6 +4143,7 @@ void simt_core_cluster::icnt_inject_request_packet(class mem_fetch *mf)
    m_stats->m_outgoing_traffic_stats->record_traffic(mf, packet_size); 
    unsigned destination = mf->get_sub_partition_id();
    mf->set_status(IN_ICNT_TO_MEM,gpu_sim_cycle+gpu_tot_sim_cycle);
+   assert(::icnt_has_buffer(m_cluster_id,(!mf->get_is_write() && !mf->isatomic())?mf->get_ctrl_size(): mf->size()));
    if (!mf->get_is_write() && !mf->isatomic())
       ::icnt_push(m_cluster_id, m_config->mem2device(destination), (void*)mf, mf->get_ctrl_size() );
    else 

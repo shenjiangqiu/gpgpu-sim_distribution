@@ -4,6 +4,8 @@
 #include <memory>
 #include <deque>
 //#define TLBDEBUG
+#define PWDEBUG
+#define TLBDEBUG
 #include "debug_macro.h"
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
@@ -23,8 +25,8 @@ l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
     {
         m_tag_arrays[i] = std::make_shared<line_cache_block>();
     }
-    global_l2_tlb_index=m_config.m_icnt_index;
-    global_walkers=m_config.m_page_table_walker_config.walker_size;
+    global_l2_tlb_index = m_config.m_icnt_index;
+    global_walkers = m_config.m_page_table_walker_config.walker_size;
 }
 l2_tlb_config::l2_tlb_config() {} //in constructor, just allocate the memory, and then parse configur,then
 
@@ -45,13 +47,13 @@ void l2_tlb_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-l2tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l2 tlb", "64");
     option_parser_register(opp, "-l2tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
     option_parser_register(opp, "-l2tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the mshr size", "16");
-    option_parser_register(opp, "-l2tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max merge size", "8");
+    option_parser_register(opp, "-l2tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max merge size", "32");
     option_parser_register(opp, "-l2tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the response queue size 0=unlimited", "0");
     option_parser_register(opp, "-l2tlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the miss queue size 0=unlimited", "0");
     option_parser_register(opp, "-l2tlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the page size", "4096");
     option_parser_register(opp, "-l2tlb_pw_size", option_dtype::OPT_UINT32, &m_pw_size, "the size of pw size", "16");
     option_parser_register(opp, "-l2tlb_pw_latency", option_dtype::OPT_UINT32, &m_pw_latency, "the latency of pw ", "500");
-    option_parser_register(opp, "-l2tlb_recv_buffer_size", option_dtype::OPT_UINT32, &recv_buffer_size, "the size of recv buffer from icnt", "64");
+    option_parser_register(opp, "-l2tlb_recv_buffer_size", option_dtype::OPT_UINT32, &recv_buffer_size, "the size of recv buffer from icnt", "1000");
 }
 void l2_tlb::init()
 {
@@ -136,7 +138,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                     case VALID:
                         printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
-                        assert(m_response_queue.size()<20);
+                        assert(m_response_queue.size() < 20);
                         return tlb_result::hit;
 
                         break;
@@ -168,7 +170,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
         (*next_line)->allocate(tag, block_addr, time, mask);
         m_mshrs->add<1>(block_addr, mf);
         m_miss_queue.push_back(mf);
-        assert(m_miss_queue.size()<10);
+        assert(m_miss_queue.size() < 10);
         outgoing_mf.insert(mf);
         printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
         return tlb_result::miss;
@@ -188,7 +190,7 @@ void l2_tlb::cycle()
     { //from response queue to icnt
         auto mf = m_response_queue.front();
         printdbg_tlb("send mf:%llX, to icnt\n", mf->get_virtual_addr());
-        auto size = 8;//ctrl size plus one tlb targe address
+        auto size = 8+8; //ctrl size plus one tlb targe address
         if (::icnt_has_buffer(m_config.m_icnt_index, size))
         {
             ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
@@ -204,7 +206,7 @@ void l2_tlb::cycle()
     {                               //push all the ready access to response Queue
         printdbg_tlb("send m_mshr next access to m response queue\n");
         m_response_queue.push_back(m_mshrs->next_access());
-        assert(m_response_queue.size()<100);
+        assert(m_response_queue.size() < 100);
         printdbg_tlb("the mf is:%llX\n", m_response_queue.back()->get_addr());
     }
     while (m_page_table_walker->ready())
@@ -231,16 +233,21 @@ void l2_tlb::cycle()
         }
     }
     mem_fetch *mf = nullptr;
-    if (m_recv_buffer.size() < m_config.recv_buffer_size)//recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
+    if (m_recv_buffer.size() < m_config.recv_buffer_size) //recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
     {
         mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
         if (mf)
         {
-            if(mf->pw_origin!=NULL){//it's a pw resquest
+            if (mf->pw_origin != NULL)
+            { //it's a pw resquest
                 m_page_table_walker->send_to_recv_buffer(mf);
-            }else{
-            printdbg_tlb("get mf from icnt!access mf:%llX\n", mf->get_virtual_addr());
-            m_recv_buffer.push(mf);
+                printdbg_PW("from icnt send to page walker!\n");
+            }
+            else
+            {
+                printdbg_tlb("get mf from icnt!access mf:%llX,from cluster%u\n", mf->get_virtual_addr(),mf->get_tpc());
+                m_recv_buffer.push(mf);
+                printdbg_PW("m recv buffer size:%lu\n", m_recv_buffer.size());
             }
         }
     }

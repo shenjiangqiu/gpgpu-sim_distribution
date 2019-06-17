@@ -2,6 +2,8 @@
 #include "page_table_walker.hpp"
 #include <unordered_map>
 //#define TLBDEBUG
+#define PWDEBUG 
+#define TLBDEBUG
 #include "debug_macro.h"
 #include "icnt_wrapper.h"
 unsigned total_mf=0;
@@ -68,7 +70,7 @@ page_table_walker::page_table_walker(unsigned int size, unsigned int latency) : 
 }
 void page_table_walker_config::reg_option(option_parser_t opp)
 {
-    option_parser_register(opp, "-page_table_walker_waiting_size", option_dtype::OPT_UINT32, &waiting_queue_size, "waiting queue size", "16");
+    option_parser_register(opp, "-page_table_walker_waiting_size", option_dtype::OPT_UINT32, &waiting_queue_size, "waiting queue size", "1000");
     option_parser_register(opp, "-page_table_walker_concurrent_size", option_dtype::OPT_UINT32, &walker_size, "the walker_size", "8");
     option_parser_register(opp, "-page_table_walker_cache_size", option_dtype::OPT_UINT32, &cache_size, "the cache_size", "32");
     option_parser_register(opp, "-page_table_walker_cache_assoc", option_dtype::OPT_UINT32, &cache_assoc, "the cache_assoc", "2");
@@ -248,7 +250,10 @@ void real_page_table_walker::cycle()
             miss_queue.pop();
             auto subpartition_id = mf->get_sub_partition_id();
 
-            ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores, mf, 8u);
+            ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores+1, mf, 8u);
+            printdbg_PW("push mf to icnt:mf->address:%llx,from %u,to: %u\n",mf->get_addr(),global_l2_tlb_index,subpartition_id+global_n_cores+1);
+        }else{
+            printdbg_PW("INCT not has buffer!\n");
         }
     }
     //start to recv from icnt//TODO change l2 icnt push decition
@@ -259,7 +264,17 @@ void real_page_table_walker::cycle()
         icnt_response_buffer.pop();
         if (child_mf)
         {
-            fill(child_mf);
+            auto mf_origin=child_mf->pw_origin;
+            auto &level= std::get<0>(working_walker[mf_origin]);
+            if (level == page_table_level::L1_LEAF)
+            {
+                delete child_mf;
+                working_walker.erase(mf_origin);
+                response_queue.push(mf_origin);
+                assert(response_queue.size() < 10);
+            }
+            else
+                fill(child_mf);
         }
     }
     while (m_mshr->access_ready())
@@ -271,13 +286,8 @@ void real_page_table_walker::cycle()
         auto &level = std::get<0>(status);        //attention! it's reference not copy!!!
         delete child_mf;
         total_mf--;
-        if (level == page_table_level::L1_LEAF)
-        {
-            working_walker.erase(mf_origin);
-            response_queue.push(mf_origin);
-            assert(response_queue.size()<10);
-        }
-        else
+        
+        assert(level!=page_table_level::L1_LEAF);
         {
             //it is not the last level, we need keep going.
             //1,change working status,to next level, to next mf, and not outgoing
@@ -417,25 +427,16 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
         return tlb_result::miss;
     }
 }
-addr_type page_table::get_physic_addr(addr_type virtual_addr, page_table_level level)
-{
-    auto index = get_m_index(virtual_addr);
-    if (level == m_level)
-    {
-        return m_physic_address + 8 * index;
-    }
-    else
-    {
-        return entries[index]->get_physic_addr(virtual_addr, level);
-    }
-}
+
 bool real_page_table_walker::send(mem_fetch *mf)
 {
     assert(waiting_queue.size() < m_config.waiting_queue_size);
     if (waiting_queue.size() < m_config.waiting_queue_size)
     {
         waiting_queue.push(mf);
-        assert(waiting_queue.size()<=m_config.waiting_queue_size);
+        printdbg_PW("waiting queu,size is %lu\n",waiting_queue.size());
+        
+        //assert(waiting_queue.size()<=m_config.waiting_queue_size);
         return true;
     }
     else

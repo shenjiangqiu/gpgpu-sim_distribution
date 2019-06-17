@@ -4,7 +4,8 @@
 #include <deque>
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
-//#define TLBDEBUG
+#define TLBDEBUG
+#define PWDEBUG
 #include"debug_macro.h"
 l1_tlb::l1_tlb(l1_tlb_config &config, page_manager* tlb_page_manager) : m_config(config),
                                                                                        m_page_manager(tlb_page_manager),
@@ -35,7 +36,7 @@ void l1_tlb_config::reg_option(option_parser_t opp)
 
     option_parser_register(opp, "-l1tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "64");
     option_parser_register(opp, "-l1tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
-    option_parser_register(opp, "-l1tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "16");
+    option_parser_register(opp, "-l1tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "64");
     option_parser_register(opp, "-l1tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "8");
     option_parser_register(opp, "-l1tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the size of response queue: 0=unlimited", "0");
     option_parser_register(opp, "-l1tlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the size of miss queue: 0=unlimited", "0");
@@ -180,6 +181,7 @@ void l1_tlb::cycle()
         {
             printdbg_tlb("from miss queue to icnt,mftpc: %u;mf :%llX\n", mf->get_tpc(), mf->get_virtual_addr());
             ::icnt_push(mf->get_tpc(), m_config.m_icnt_index, mf, size);
+            printdbg_PW("push from core:%u,send to %u\n",mf->get_tpc(),m_config.m_icnt_index);
             m_miss_queue.pop_front(); //successfully pushed to icnt
         }
     }
@@ -222,7 +224,7 @@ void l1_tlb::fill(mem_fetch *mf, unsigned long long time)
     }
  
     assert(done&& "fill must succeed");
-    throw std::runtime_error("can't be here");
+    //throw std::runtime_error("can't be here");
 }
 unsigned int l1_tlb::outgoing_size(){
     return outgoing_mf.size();
@@ -231,8 +233,8 @@ unsigned int l1_tlb::outgoing_size(){
 void l1I_tlb_config::reg_option(option_parser_t opp){
     option_parser_register(opp, "-l1Itlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "64");
     option_parser_register(opp, "-l1Itlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
-    option_parser_register(opp, "-l1Itlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "16");
-    option_parser_register(opp, "-l1Itlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "8");
+    option_parser_register(opp, "-l1Itlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "2");
+    option_parser_register(opp, "-l1Itlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "32");
     option_parser_register(opp, "-l1Itlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the size of response queue: 0=unlimited", "0");
     option_parser_register(opp, "-l1Itlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the size of miss queue: 0=unlimited", "0");
     option_parser_register(opp, "-l1Itlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the tlb_line_size,currently we only support 4096", "4096");

@@ -54,7 +54,7 @@ mem_fetch::mem_fetch( const mem_access_t &access,
                       const struct memory_config *config,
 					  mem_fetch *m_original_mf,
 					  mem_fetch *m_original_wr_mf,
-                      mem_fetch* pw_origin):finished_tlb(false),pw_origin(pw_origin)
+                      mem_fetch* pw_origin):is_in_response_queue(false),magic_number(0x12341234),finished_tlb(false),pw_origin(pw_origin)
 
 {
     #ifdef TLBDEBUG
@@ -97,6 +97,9 @@ mem_fetch::mem_fetch( const mem_access_t &access,
 
 mem_fetch::~mem_fetch()
 {
+    if(is_in_response_queue){
+        throw;
+    }
     m_status = MEM_FETCH_DELETED;
     #ifdef TLBDEBUG
     m_nums--;

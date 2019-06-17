@@ -77,6 +77,8 @@ class  gpgpu_sim_wrapper {};
 #include <iostream>
 #include <sstream>
 #include <string>
+#define PWDEBUG
+#include"debug_macro.h"
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
@@ -1577,9 +1579,10 @@ void gpgpu_sim::cycle()
             mem_fetch* mf = m_memory_sub_partition[i]->top();
             if (mf) {
                if(mf->pw_origin!=NULL){//that should be send to l2_tlb//TODO need to set mf data size and read
-                  unsigned response_size = mf->get_is_write()?mf->get_ctrl_size():mf->size();
+                  unsigned response_size =8+8;
                   if(::icnt_has_buffer(m_shader_config->mem2device(i),response_size)){
                      ::icnt_push(m_shader_config->mem2device(i),global_l2_tlb_index,mf,response_size);
+                     printdbg_PW("push pw requst from mem to l2 tlb\n");
                      m_memory_sub_partition[i]->pop();
                      partiton_replys_in_parallel_per_cycle++;
 
