@@ -347,7 +347,7 @@ void GPUTrafficManager::_Step()
   
   for ( int subnet = 0; subnet < _subnets; ++subnet ) {
     for ( int n = 0; n < _nodes; ++n ) {
-      Flit * const f = _net[subnet]->ReadFlit( n );
+      Flit * const f = _net[subnet]->ReadFlit( n );//net->eject to icnt->ejection_buffer
       if ( f ) {
         if(f->watch) {
           *gWatchOut << GetSimTime() << " | "
@@ -360,9 +360,9 @@ void GPUTrafficManager::_Step()
         g_icnt_interface->WriteOutBuffer(subnet, n, f);
       }
       
-      g_icnt_interface->Transfer2BoundaryBuffer(subnet, n);
-      Flit* const ejected_flit = g_icnt_interface->GetEjectedFlit(subnet, n);
-      if (ejected_flit) {
+      g_icnt_interface->Transfer2BoundaryBuffer(subnet, n);//transfer and mark ejected_flit_queue
+      Flit* const ejected_flit = g_icnt_interface->GetEjectedFlit(subnet, n);//pop from ejected flit
+      if (ejected_flit) {//and insert to flits array
         if(ejected_flit->head)
           assert(ejected_flit->dest == n);
         if(ejected_flit->watch) {
@@ -383,9 +383,9 @@ void GPUTrafficManager::_Step()
       }
     
       // Processing the credit From the network
-      Credit * const c = _net[subnet]->ReadCredit( n );
+      Credit * const c = _net[subnet]->ReadCredit( n );//
       if ( c ) {
-#ifdef TRACK_FLOWS
+        #ifdef TRACK_FLOWS
         for(set<int>::const_iterator iter = c->vc.begin(); iter != c->vc.end(); ++iter) {
           int const vc = *iter;
           assert(!_outstanding_classes[n][subnet][vc].empty());
@@ -394,7 +394,7 @@ void GPUTrafficManager::_Step()
           assert(_outstanding_credits[cl][subnet][n] > 0);
           --_outstanding_credits[cl][subnet][n];
         }
-#endif
+        #endif
         _buf_states[n][subnet]->ProcessCredit(c);
         c->Free();
       }
@@ -495,6 +495,7 @@ void GPUTrafficManager::_Step()
             assert(vc_end >= se.vc_start && vc_end <= se.vc_end);
             assert(vc_start <= vc_end);
           }
+          //gWatchOut=&cout;
           if(cf->watch) {
             *gWatchOut << GetSimTime() << " | " << FullName() << " | "
             << "Finding output VC for flit " << cf->id
@@ -589,10 +590,10 @@ void GPUTrafficManager::_Step()
         
         _input_queue[subnet][n][c].pop_front();
         
-#ifdef TRACK_FLOWS
+        #ifdef TRACK_FLOWS
         ++_outstanding_credits[c][subnet][n];
         _outstanding_classes[n][subnet][f->vc].push(c);
-#endif
+        #endif
         
         dest_buf->SendingFlit(f);
         
@@ -625,9 +626,9 @@ void GPUTrafficManager::_Step()
           }
         }
         
-#ifdef TRACK_FLOWS
+        #ifdef TRACK_FLOWS
         ++_injected_flits[c][n];
-#endif
+        #endif
         
         _net[subnet]->WriteFlit(f, n);
         
@@ -653,9 +654,9 @@ void GPUTrafficManager::_Step()
         c->vc.insert(f->vc);
         _net[subnet]->WriteCredit(c, n);
         
-#ifdef TRACK_FLOWS
+        #ifdef TRACK_FLOWS
         ++_ejected_flits[f->cl][n];
-#endif
+        #endif
         
         _RetireFlit(f, n);
       }

@@ -654,12 +654,17 @@ void memory_sub_partition::push( mem_fetch* m_req, unsigned long long cycle )
     if (m_req) {
     	m_stats->memlatstat_icnt2mem_pop(m_req);
     	std::vector<mem_fetch*> reqs;
-    	if(m_config->m_L2_config.m_cache_type == SECTOR)
-    		reqs = breakdown_request_to_sector_requests(m_req);
-    	else
-    		reqs.push_back(m_req);
-
-    	for(unsigned i=0; i<reqs.size(); ++i) {
+        if(m_req->pw_origin!=nullptr){
+            reqs.push_back(m_req);
+        }
+        else
+        {
+            if (m_config->m_L2_config.m_cache_type == SECTOR)
+                reqs = breakdown_request_to_sector_requests(m_req);
+            else
+                reqs.push_back(m_req);
+        }
+        for(unsigned i=0; i<reqs.size(); ++i) {
     		mem_fetch* req = reqs[i];
 			m_request_tracker.insert(req);
 			if( req->istexture() ) {

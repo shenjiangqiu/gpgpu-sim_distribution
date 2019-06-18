@@ -45,7 +45,7 @@
 #include "intersim_config.hpp"
 #include "network.hpp"
 #include "trace.h"
-
+#include"../gpgpu-sim/l2_tlb.hpp"
 InterconnectInterface* InterconnectInterface::New(const char* const config_file)
 {
   if (! config_file ) {
@@ -165,17 +165,22 @@ void InterconnectInterface::Push(unsigned input_deviceID, unsigned output_device
   if (_subnets == 1) {
     subnet = 0;
   } else {
-    if (input_deviceID < _n_shader ) {
+    if (input_deviceID < _n_shader ) {//that's shader cores
       subnet = 0;
-    } else {
-      subnet = 1;
+    } else {//mem's behaivor(don't worry about l2 tlb, that's handled below)
+      if(output_deviceID==15){
+        subnet=0;//send to l2 tlb reply
+      }else{
+        subnet = 1;//send to core
+      }
     }
   }
+  
 
   //TODO: Remove mem_fetch to reduce dependency
   Flit::FlitType packet_type;
   mem_fetch* mf = static_cast<mem_fetch*>(data);
-
+  
   switch (mf->get_type()) {
     case READ_REQUEST:  packet_type = Flit::READ_REQUEST   ;break;
     case WRITE_REQUEST: packet_type = Flit::WRITE_REQUEST  ;break;
@@ -187,6 +192,19 @@ void InterconnectInterface::Push(unsigned input_deviceID, unsigned output_device
     		assert (0 && "Type is undefined");
     	}
   }
+  if(input_deviceID==global_l2_tlb_index){//special for l2tlb request
+    if(mf->pw_origin!=nullptr){//that is a pw request send to mem
+      
+      subnet=0;
+      packet_type=Flit::READ_REQUEST;
+    }else{
+      subnet=1;//send to core;
+      packet_type=Flit::READ_REPLY;
+    }
+  }
+  
+
+
 
   //TODO: _include_queuing ?
   _traffic_manager->_GeneratePacket( input_icntID, -1, 0 /*class*/, _traffic_manager->_time, subnet, n_flits, packet_type, data, output_icntID);

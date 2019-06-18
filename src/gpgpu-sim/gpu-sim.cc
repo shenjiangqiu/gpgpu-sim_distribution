@@ -77,6 +77,8 @@ class  gpgpu_sim_wrapper {};
 #include <iostream>
 #include <sstream>
 #include <string>
+#define PWDEBUG
+#include"debug_macro.h"
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
@@ -1563,7 +1565,9 @@ unsigned long long g_single_step=0; // set this in gdb to single step the pipeli
 void gpgpu_sim::cycle()
 {
    int clock_mask = next_clock_domain();
-
+   if(gpu_sim_cycle%10000==0){
+      printf("gpu sim cycle:%llu\n",gpu_sim_cycle);
+   }
    if (clock_mask & CORE ) {
       m_l2_tlb.cycle();
        // shader core loading (pop from ICNT into core) follows CORE clock
@@ -1577,9 +1581,10 @@ void gpgpu_sim::cycle()
             mem_fetch* mf = m_memory_sub_partition[i]->top();
             if (mf) {
                if(mf->pw_origin!=NULL){//that should be send to l2_tlb//TODO need to set mf data size and read
-                  unsigned response_size = mf->get_is_write()?mf->get_ctrl_size():mf->size();
+                  unsigned response_size =8+8;
                   if(::icnt_has_buffer(m_shader_config->mem2device(i),response_size)){
                      ::icnt_push(m_shader_config->mem2device(i),global_l2_tlb_index,mf,response_size);
+                     printdbg_PW("push pw requst from mem to l2 tlb\n");
                      m_memory_sub_partition[i]->pop();
                      partiton_replys_in_parallel_per_cycle++;
 
@@ -1686,7 +1691,7 @@ void gpgpu_sim::cycle()
       }
 #endif
 
-      issue_block2core();
+      issue_block2core();//TODO
       
       // Depending on configuration, invalidate the caches once all of threads are completed.
       int all_threads_complete = 1;
