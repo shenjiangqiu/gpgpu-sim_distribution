@@ -54,18 +54,25 @@ mem_fetch::mem_fetch( const mem_access_t &access,
                       const struct memory_config *config,
 					  mem_fetch *m_original_mf,
 					  mem_fetch *m_original_wr_mf,
-                      mem_fetch* pw_origin):is_in_response_queue(false),magic_number(0x12341234),finished_tlb(false),pw_origin(pw_origin)
+                      mem_fetch* pw_origin):/* is_in_response_queue(false),magic_number(0x12341234),*/finished_tlb(false),pw_origin(pw_origin)
 
 {
     #ifdef TLBDEBUG
     m_nums++;
     #endif
     printdbg_tlb("mem_fetch(),mf total nums: %d,current id %u\n",m_nums,sm_next_mf_request_uid);
+    
+
    m_request_uid = sm_next_mf_request_uid++;
    m_access = access;
-   if( inst ) { 
+   if (inst)
+   {
        m_inst = *inst;
-       assert( wid == m_inst.warp_id() );
+       assert(wid == m_inst.warp_id());
+       if (inst->space.get_type() != global_space)
+       { //only global space requset need tlb,currently/TODO
+           finished_tlb = true;
+       }
    }
    m_data_size = access.get_size();
    m_ctrl_size = ctrl_size;
@@ -97,9 +104,10 @@ mem_fetch::mem_fetch( const mem_access_t &access,
 
 mem_fetch::~mem_fetch()
 {
-    if(is_in_response_queue){
+
+    /* if(is_in_response_queue){
         throw;
-    }
+    } */
     m_status = MEM_FETCH_DELETED;
     #ifdef TLBDEBUG
     m_nums--;

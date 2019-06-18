@@ -120,11 +120,13 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                             m_mshrs->add<2>(block_addr, mf);//adding to existing entry
                             printdbg_tlb("l1 hit_reserved and push to mshr\n");
                             (*start)->set_last_access_time(time, mask);
+                            mf->finished_tlb=true;
                             return tlb_result::hit_reserved;
                         }
                         break;
                     case VALID:
                         printdbg_tlb("push to response queu: mf: %llX\n", mf->get_virtual_addr());
+                        mf->finished_tlb=true;
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                         return tlb_result::hit;
 

@@ -1,3 +1,13 @@
+
+#define TLBDEBUG
+#define FETCHDEBUG
+#define PWDEBUG
+
+#undef TLBDEBUG
+#undef FETCHDEBUG
+#undef PWDEBUG
+
+
 #define printdbg(...)                              \
     do                                             \
     {                                              \

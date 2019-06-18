@@ -844,16 +844,16 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
                     switch (result)
                     {
                     case tlb_result::hit:
-                        mf->is_in_response_queue=true;
+                        //mf->is_in_response_queue=true;
                         //instruction_tlb_response_queue.push_front(mf); //if it's hit, we expect that can also hit L1I in this cycle, so we push front.
-                        for (auto inside : instruction_tlb_response_queue)
+                        /* for (auto inside : instruction_tlb_response_queue)
                         {
                             printdbg_PW("core:%lu,cycle:%llu,%llx,%lx\n", get_sid(), gpu_sim_cycle + gpu_tot_sim_cycle, inside->get_virtual_addr(), inside->magic_number);
-                        }
-                        fflush(stdout);
-                        fflush(stderr);
-                        printdbg_PW("push mf: %llx\n",instruction_tlb_response_queue.front());
-                        assert(instruction_tlb_response_queue.front()->magic_number==0x12341234);
+                        } */
+                        //fflush(stdout);
+                        //fflush(stderr);
+                        //printdbg_PW("push mf: %llx\n",instruction_tlb_response_queue.front());
+                        // assert(instruction_tlb_response_queue.front()->magic_number==0x12341234);
                         assert(instruction_tlb_response_queue.size()<100);
                     
                         m_last_warp_fetched = warp_id;
@@ -891,15 +891,15 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
             while (!m_l1I_tlb->reponse_empty())
             {
                 auto mf = m_l1I_tlb->get_top_response();
-                mf->is_in_response_queue=true;
+                // mf->is_in_response_queue=true;
                 instruction_tlb_response_queue.push_back(mf);
-                for (auto inside : instruction_tlb_response_queue)
+                /* for (auto inside : instruction_tlb_response_queue)
                 {
                     printdbg_PW("core:%lu,cycle:%llu,%llx,%lx\n", get_sid(), gpu_sim_cycle + gpu_tot_sim_cycle, inside->get_virtual_addr(), inside->magic_number);
-                }
+                } */
                 fflush(stdout);
                 printdbg_PW("push mf:%llx\n",mf);
-                assert(mf->magic_number == 0x12341234);
+                // assert(mf->magic_number == 0x12341234);
 
                 assert(instruction_tlb_response_queue.size()<100);
 
@@ -910,32 +910,37 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
 
                 auto nbytes = 16;
                 auto tlb_mf = instruction_tlb_response_queue.front();
-                 assert(tlb_mf->magic_number==0x12341234);
+                //  assert(tlb_mf->magic_number==0x12341234);
                  //debugs
                 auto warp_id = tlb_mf->get_wid();
                 std::list<cache_event> events;
                 printdbg_fetch("new tlb_mf fetch probe: tlb_mf:%llX\n", tlb_mf->get_addr());
-                auto ppc = tlb_mf->get_physic_addr();
-                auto pc = ppc - PROGRAM_MEM_START;
+                auto physic_addr = tlb_mf->get_physic_addr();
+                auto pc = tlb_mf->get_virtual_addr() - PROGRAM_MEM_START;
 
-                enum cache_request_status status = m_L1I->access((new_addr_type)ppc, tlb_mf, gpu_sim_cycle + gpu_tot_sim_cycle, events);
+                enum cache_request_status status = m_L1I->access((new_addr_type)physic_addr, tlb_mf, gpu_sim_cycle + gpu_tot_sim_cycle, events);
                 if (status == MISS)
                 {
                     printdbg_fetch("fetch miss!\n");
                     //m_last_warp_fetched = warp_id;//it is decided in tlb access above
                     m_warp[warp_id].set_imiss_pending();
                     m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
-                    tlb_mf->is_in_response_queue=false;
+                 //   tlb_mf->is_in_response_queue=false;
                     instruction_tlb_response_queue.pop_front();
                 }
                 else if (status == HIT)
                 {
                     printdbg_fetch("fetch hit!\n");
                     //m_last_warp_fetched = warp_id;
+                    m_warp[tlb_mf->get_wid()].clear_imiss_pending();
+
                     m_inst_fetch_buffer = ifetch_buffer_t(pc, nbytes, warp_id);
+                    assert(m_warp[tlb_mf->get_wid()].get_pc() == (tlb_mf->get_virtual_addr() - PROGRAM_MEM_START)); // Verify that we got the instruction we were expecting.
+                    m_inst_fetch_buffer.m_valid = true;
+
                     m_warp[warp_id].set_last_fetch(gpu_sim_cycle);
                     instruction_tlb_response_queue.pop_front();
-                    tlb_mf->is_in_response_queue=false;
+                 //   tlb_mf->is_in_response_queue=false;
                     delete tlb_mf;
                 }
                 else
@@ -2434,6 +2439,8 @@ bool ldst_unit::tlb_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_reason
    const mem_access_t &access = inst.accessq_back();
 
    mem_fetch *mf = m_mf_allocator->alloc(inst, inst.accessq_back());
+   auto physicaddr=mf->physic_addr;
+
    auto result = m_l1_tlb->access(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
    switch (result)
    {
@@ -2492,6 +2499,7 @@ void ldst_unit::cycle()
        assert(m_l1_tlb);
        assert(mf);
        printdbg_tlb("access from icnt,mf:%llX\n",mf->get_addr());
+       assert(m_l1_tlb->outgoing_size()<100);
        if (m_l1_tlb->is_outgoing(mf)) //this is a tlb_resquest
        {
            assert(!mf->finished_tlb);
@@ -3225,11 +3233,11 @@ unsigned int shader_core_config::max_cta( const kernel_info_t &k ) const
 
 void shader_core_ctx::cycle()
 {
-    if(instruction_tlb_response_queue.size()>0)
+    /* if(instruction_tlb_response_queue.size()>0)
         printdbg_PW("tlb_reponse_queue.size:%lu, top mf:%llx, mf.magic_number:%x,core id:%u\n",instruction_tlb_response_queue.size(),instruction_tlb_response_queue.front(),instruction_tlb_response_queue.front()->magic_number,this->get_sid());
     else{
         printdbg_PW("tlb_response_queue size :0,core id:%u\n",this->get_sid());
-    }
+    } */ 
 	m_stats->shader_cycles[m_sid]++;
     writeback();
     execute();
@@ -4190,8 +4198,8 @@ void simt_core_cluster::icnt_cycle()
             return;
         }
         assert(mf->get_tpc() == m_cluster_id);
-        
-        assert(mf->finished_tlb==false|| mf->get_type() == READ_REPLY || mf->get_type() == WRITE_ACK );
+        auto type=mf->get_type();
+        assert(!mf->finished_tlb || type == READ_REPLY || type== WRITE_ACK );//if it's a tlb request, it wouldn't change it's original type
 
         // The packet size varies depending on the type of request: 
         // - For read request and atomic request, the packet contains the data 

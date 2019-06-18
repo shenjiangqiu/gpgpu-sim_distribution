@@ -1565,7 +1565,9 @@ unsigned long long g_single_step=0; // set this in gdb to single step the pipeli
 void gpgpu_sim::cycle()
 {
    int clock_mask = next_clock_domain();
-
+   if(gpu_sim_cycle%10000==0){
+      printf("gpu sim cycle:%llu\n",gpu_sim_cycle);
+   }
    if (clock_mask & CORE ) {
       m_l2_tlb.cycle();
        // shader core loading (pop from ICNT into core) follows CORE clock
@@ -1689,7 +1691,7 @@ void gpgpu_sim::cycle()
       }
 #endif
 
-      issue_block2core();
+      issue_block2core();//TODO
       
       // Depending on configuration, invalidate the caches once all of threads are completed.
       int all_threads_complete = 1;
