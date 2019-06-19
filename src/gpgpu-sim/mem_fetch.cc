@@ -81,8 +81,11 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    m_wid = wid;
 
    virtual_addr=access.get_addr();
-   physic_addr=global_page_manager->translate(virtual_addr);
-   
+   if (sid == -1)
+       physic_addr = virtual_addr; //that is a wb request, no need to do the translation
+   else
+       physic_addr = global_page_manager->translate(virtual_addr);
+
    config->m_address_mapping.addrdec_tlx(physic_addr,&m_raw_addr);
    m_partition_addr = config->m_address_mapping.partition_address(physic_addr);
 
