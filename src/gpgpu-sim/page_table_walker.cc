@@ -2,11 +2,11 @@
 #include "page_table_walker.hpp"
 #include <unordered_map>
 //#define TLBDEBUG
-#define PWDEBUG 
+#define PWDEBUG
 #define TLBDEBUG
 #include "debug_macro.h"
 #include "icnt_wrapper.h"
-unsigned total_mf=0;
+unsigned total_mf = 0;
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
 latency_queue::latency_queue(unsigned long long latency, unsigned size) : m_size_limit(size),
@@ -135,7 +135,16 @@ bool real_page_table_walker::ready() const
 {
     return !response_queue.empty();
 }
+void set_pw_mf(mem_fetch *new_mf, page_table_level level,mem_fetch* parent)
+{
+    auto page_table_addr = global_page_manager->get_pagetable_physic_addr(new_mf->get_virtual_addr(), level);
 
+    new_mf->m_data_size = 8;
+    new_mf->m_type = READ_REQUEST;
+    new_mf->pw_origin = parent;
+    new_mf->physic_addr = page_table_addr; //need to fetch a cache line ,
+    new_mf->reset_raw_addr();
+}
 void real_page_table_walker::cycle()
 {
     //TODO:1,send waiting queue to working_walker,//
@@ -146,15 +155,10 @@ void real_page_table_walker::cycle()
     {
         auto mf = waiting_queue.front();
         waiting_queue.pop();
-        auto page_table_addr = global_page_manager->get_pagetable_physic_addr(mf->get_virtual_addr(), page_table_level::L4_ROOT);
-        auto new_mf = new mem_fetch(*mf);
+        auto new_mf =mf->get_copy();
         total_mf++;
-        assert(total_mf<m_config.walker_size);
-        new_mf->m_data_size = 8;
-        new_mf->m_type = READ_REQUEST;
-        new_mf->pw_origin = mf;
-        new_mf->physic_addr = page_table_addr; //need to fetch a cache line ,
-        new_mf->reset_raw_addr();
+        assert(total_mf <= m_config.walker_size);
+        set_pw_mf(new_mf,page_table_level::L4_ROOT,mf);
         assert(working_walker.find(mf) == working_walker.end());
         working_walker[mf] = std::make_tuple(page_table_level::L4_ROOT, new_mf, false);
         ready_to_send.push(mf);
@@ -167,9 +171,9 @@ void real_page_table_walker::cycle()
         auto mf = ready_to_send.front();
         if (std::get<0>(working_walker[mf]) == page_table_level::L1_LEAF)
         { //send leaf access to l2 cache
-            auto next_mf = new mem_fetch(*mf);
-            total_mf++;
-            assert(total_mf<m_config.walker_size);
+            auto next_mf = std::get<1>(working_walker[mf]);
+            assert(std::get<2>(working_walker[mf]) == false);
+            //assert(total_mf<m_config.walker_size);
             next_mf->m_data_size = 8;
             next_mf->m_type = READ_REQUEST;
 
@@ -183,7 +187,7 @@ void real_page_table_walker::cycle()
             // std::get<0>(target_status) = pagetab
             std::get<1>(target_status) = next_mf;
             miss_queue.push(next_mf);
-            assert(miss_queue.size()<10);
+            assert(miss_queue.size() < 10);
             std::get<2>(working_walker[mf]) = true; //already sent
             ready_to_send.pop();
         }
@@ -199,28 +203,25 @@ void real_page_table_walker::cycle()
                 auto current_level = std::get<0>(target_status);
                 std::get<0>(target_status) = get_next_level(current_level);
 
-                delete std::get<1>(target_status);
-                total_mf--;
-                auto next_mf = new mem_fetch(*mf);
-                total_mf++;
-                assert(total_mf<m_config.walker_size);
-                next_mf->m_data_size = 8;
-                next_mf->m_type = READ_REQUEST;
+                delete child_mf;
+                //total_mf--;
 
-                next_mf->pw_origin = mf;
-                assert(next_mf->get_is_write() == false);
-                auto page_table_addr = global_page_manager->get_pagetable_physic_addr(mf->get_virtual_addr(), get_next_level(current_level));
+                auto next_mf = mf->get_copy();
+                //total_mf++;
 
-                next_mf->physic_addr = page_table_addr;
-                next_mf->reset_raw_addr();
+                assert(total_mf <= m_config.walker_size);
+                set_pw_mf(next_mf,get_next_level(current_level),mf);
                 std::get<1>(target_status) = next_mf;
+                std::get<2>(target_status)=false;
                 ready_to_send.pop();
                 ready_to_send.push(mf);
-                assert(ready_to_send.size()<m_config.walker_size);
+                assert(ready_to_send.size() < m_config.walker_size);
                 break;
             }
             case tlb_result::hit_reserved:
             {
+                assert(std::get<2>(working_walker[mf]) == false);
+
                 std::get<2>(working_walker[mf]) = true; //it's on_going;
                 ready_to_send.pop();
                 break;
@@ -250,9 +251,11 @@ void real_page_table_walker::cycle()
             miss_queue.pop();
             auto subpartition_id = mf->get_sub_partition_id();
 
-            ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores+1, mf, 8u);
-            printdbg_PW("push mf to icnt:mf->address:%llx,from %u,to: %u\n",mf->get_addr(),global_l2_tlb_index,subpartition_id+global_n_cores+1);
-        }else{
+            ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores + 1, mf, 8u);
+            printdbg_PW("push mf to icnt:mf->address:%llx,from %u,to: %u\n", mf->get_addr(), global_l2_tlb_index, subpartition_id + global_n_cores + 1);
+        }
+        else
+        {
             printdbg_PW("INCT not has buffer!\n");
         }
     }
@@ -264,11 +267,15 @@ void real_page_table_walker::cycle()
         icnt_response_buffer.pop();
         if (child_mf)
         {
-            auto mf_origin=child_mf->pw_origin;
-            auto &level= std::get<0>(working_walker[mf_origin]);
+            auto mf_origin = child_mf->pw_origin;
+            auto &level = std::get<0>(working_walker[mf_origin]);
             if (level == page_table_level::L1_LEAF)
             {
+                assert(std::get<2>(working_walker[mf_origin]) == true);
                 delete child_mf;
+                total_mf--;
+
+
                 working_walker.erase(mf_origin);
                 response_queue.push(mf_origin);
                 assert(response_queue.size() < 10);
@@ -284,31 +291,28 @@ void real_page_table_walker::cycle()
         assert(mf_origin != NULL);
         auto &status = working_walker[mf_origin]; //fix bug, that should be reference!!!!!!
         auto &level = std::get<0>(status);        //attention! it's reference not copy!!!
+        
         delete child_mf;
         total_mf--;
-        
-        assert(level!=page_table_level::L1_LEAF);
-        {
-            //it is not the last level, we need keep going.
-            //1,change working status,to next level, to next mf, and not outgoing
-            level = get_next_level(level); //change to next level,1
-            auto next_mf = new mem_fetch(*mf_origin);
-            total_mf++;
-            assert(total_mf<m_config.walker_size);
-            next_mf->m_data_size = 8; //only one entry
-            next_mf->m_type = READ_REQUEST;
 
-            next_mf->pw_origin = mf_origin;
-            auto page_table_addr = global_page_manager->get_pagetable_physic_addr(mf_origin->get_virtual_addr(), level);
+        assert(level != page_table_level::L1_LEAF);
 
-            next_mf->physic_addr = page_table_addr;
-            next_mf->reset_raw_addr();
-            std::get<1>(status) = next_mf; //set next mf;/2
-            assert(std::get<2>(status) == true);
-            std::get<2>(status) = false; //set next outgoing bit/3
-            ready_to_send.push(mf_origin);
-            assert(ready_to_send.size()<m_config.walker_size);
-        }
+        //it is not the last level, we need keep going.
+        //1,change working status,to next level, to next mf, and not outgoing
+        level = get_next_level(level); //change to next level,1
+
+        auto next_mf =mf_origin->get_copy();
+        total_mf++;
+
+        assert(total_mf <= m_config.walker_size);
+
+        set_pw_mf(next_mf, level,mf_origin);
+
+        std::get<1>(status) = next_mf; //set next mf;/2
+        assert(std::get<2>(status) == true);
+        std::get<2>(status) = false; //set next outgoing bit/3
+        ready_to_send.push(mf_origin);
+        assert(ready_to_send.size() <= m_config.walker_size);
     }
 }
 
@@ -434,8 +438,8 @@ bool real_page_table_walker::send(mem_fetch *mf)
     if (waiting_queue.size() < m_config.waiting_queue_size)
     {
         waiting_queue.push(mf);
-        printdbg_PW("waiting queu,size is %lu\n",waiting_queue.size());
-        
+        printdbg_PW("waiting queu,size is %lu\n", waiting_queue.size());
+
         //assert(waiting_queue.size()<=m_config.waiting_queue_size);
         return true;
     }

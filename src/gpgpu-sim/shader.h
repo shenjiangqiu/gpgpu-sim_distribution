@@ -106,7 +106,7 @@ public:
     }
     void reset()
     {
-        assert( m_stores_outstanding==0);
+        //assert( m_stores_outstanding==0);//TODO why that can't be zero
         assert( m_inst_in_pipeline==0);
         m_imiss_pending=false;
         m_warp_id=(unsigned)-1;

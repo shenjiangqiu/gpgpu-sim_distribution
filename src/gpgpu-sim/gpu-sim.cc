@@ -1565,9 +1565,7 @@ unsigned long long g_single_step=0; // set this in gdb to single step the pipeli
 void gpgpu_sim::cycle()
 {
    int clock_mask = next_clock_domain();
-   if(gpu_sim_cycle%10000==0){
-      printf("gpu sim cycle:%llu\n",gpu_sim_cycle);
-   }
+   
    if (clock_mask & CORE ) {
       m_l2_tlb.cycle();
        // shader core loading (pop from ICNT into core) follows CORE clock
@@ -1679,8 +1677,10 @@ void gpgpu_sim::cycle()
       if( g_single_step && ((gpu_sim_cycle+gpu_tot_sim_cycle) >= g_single_step) ) {
           raise(SIGTRAP); // Debug breakpoint
       }
-	 gpu_sim_cycle++;
-	
+      gpu_sim_cycle++;
+      if ((gpu_sim_cycle + gpu_tot_sim_cycle) % 10000 == 0)
+         printf("Running %llu Cycles, this Insn:%llu, Last Insn:%llu\n", gpu_sim_cycle + gpu_tot_sim_cycle, gpu_sim_cycle, last_gpu_sim_insn);
+
       if( g_interactive_debugger_enabled ) 
          gpgpu_debug();
 
@@ -1770,8 +1770,9 @@ void gpgpu_sim::cycle()
          }
       }
 
-      if (!(gpu_sim_cycle % 50000)) {
+      if (!((gpu_sim_cycle+gpu_tot_sim_cycle) % 50000)) {
          // deadlock detection 
+
          if (m_config.gpu_deadlock_detect && gpu_sim_insn == last_gpu_sim_insn) {
             gpu_deadlock = true;
          } else {

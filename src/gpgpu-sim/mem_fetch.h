@@ -47,13 +47,20 @@ enum mf_type {
 #undef MF_TUP
 #undef MF_TUP_END
 //#define TLBDEBUG
+
+
 class mem_fetch {
 public:
 //for debug
     //unsigned magic_number;
     //bool is_in_response_queue;
     mem_fetch* pw_origin;
-
+    mem_fetch* get_copy(){
+        #ifdef TLBDEBUG
+        m_nums++;
+        #endif
+        return new mem_fetch(*this);
+    }
     #ifdef TLBDEBUG
     static int m_nums;
     #endif
@@ -67,7 +74,8 @@ public:
 			   mem_fetch *original_mf = NULL,
 			   mem_fetch *original_wr_mf = NULL,
                mem_fetch *pw_origin=NULL );
-    mem_fetch(mem_fetch&other)=default;
+    private: mem_fetch(mem_fetch &other)=default;
+    public:
    ~mem_fetch();
    void reset_raw_addr();
    bool finished_tlb;
