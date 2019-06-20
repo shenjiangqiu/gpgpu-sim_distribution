@@ -1719,7 +1719,7 @@ ldst_unit::process_cache_access( cache_t* cache,
     }
     if ( status == HIT ) {
         assert( !read_sent );
-        if(cache->get_type()==666){//if it is l1 cache, we only need to pop tlb response queue
+        if(cache->get_type()==666){//if it is l1 cache, we only need to pop tlb response queue //it's a bug!
             m_l1_tlb->pop_response();
         }else{
         inst.accessq_pop_back();
@@ -1946,7 +1946,7 @@ bool ldst_unit::memory_cycle(  mem_stage_stall_type &stall_reason, mem_stage_acc
            if( inst.is_load() ) { 
               for( unsigned r=0; r < MAX_OUTPUT_VALUES; r++) 
                   if(inst.out[r] > 0) 
-                      assert( m_pending_writes[inst.warp_id()][inst.out[r]] > 0 );
+                      assert( m_pending_writes[inst.warp_id()][inst.out[r]] > 0 );//that is inc in issue!
            } else if( inst.is_store() ) 
               m_core->inc_store_req( inst.warp_id() );
        }
@@ -2280,6 +2280,7 @@ void ldst_unit:: issue( register_set &reg_set )
    if (inst->is_load() and inst->space.get_type() != shared_space) {
       unsigned warp_id = inst->warp_id();
       unsigned n_accesses = inst->accessq_count();
+      assert(n_accesses>0);
       for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++) {
          unsigned reg_id = inst->out[r];
          if (reg_id > 0) {
@@ -2477,6 +2478,7 @@ bool ldst_unit::tlb_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_reason
         //at this case, do not pop access from inst, we did nothing for that, remember to delete mf
         delete mf;
         stall_reason =BK_CONF;
+        assert(!inst.accessq_empty());
         return false;
        break;
    default:
@@ -2486,14 +2488,15 @@ bool ldst_unit::tlb_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_reason
 }
 
 void ldst_unit::cycle()
-{
+{   
+
    writeback();//write ready asscess to shader core
    m_operand_collector->step();
    for( unsigned stage=0; (stage+1)<m_pipeline_depth; stage++ ) 
        if( m_pipeline_reg[stage]->empty() && !m_pipeline_reg[stage+1]->empty() )
             move_warp(m_pipeline_reg[stage], m_pipeline_reg[stage+1]);
 
-   if (!m_response_fifo.empty())
+   if (!m_response_fifo.empty())//from icnt 
    {
        mem_fetch *mf = m_response_fifo.front();
        assert(m_l1_tlb);
@@ -2516,7 +2519,7 @@ void ldst_unit::cycle()
            mf->finished_tlb = true;
            m_response_fifo.pop_front();
        }
-       else
+       else //fill the l1D cache
        {
            assert(mf->finished_tlb);
            printdbg_tlb("l1D access this mf:%llX\n",mf->get_addr());
@@ -2595,15 +2598,20 @@ void ldst_unit::cycle()
    enum mem_stage_stall_type rc_fail = NO_RC_FAIL;
    mem_stage_access_type type;
    bool done = true;
+    /*
+        var done here should be treated seriously!
+     */
+
    done &= shared_cycle(pipe_reg, rc_fail, type);
    done &= constant_cycle(pipe_reg, rc_fail, type);
    done &= texture_cycle(pipe_reg, rc_fail, type);
    done &= tlb_cycle(pipe_reg, rc_fail, type);//read from pipline , send to tlb.
-   done &= memory_cycle( rc_fail, type);//read from tlb response queue, do regular preocess
+   memory_cycle( rc_fail, type);//read from tlb response queue, do regular preocess / fix bug, in this new design, we don't need to consider the done of memory_cycle()!
    m_mem_rc = rc_fail;
 
    if (!done) { // log stall types and return
       assert(rc_fail != NO_RC_FAIL);
+      assert(!pipe_reg.accessq_empty());
       m_stats->gpgpu_n_stall_shd_mem++;
       m_stats->gpu_stall_shd_mem_breakdown[type][rc_fail]++;
       return;
