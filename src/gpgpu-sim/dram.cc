@@ -227,7 +227,7 @@ dram_req_t::dram_req_t( class mem_fetch *mf, unsigned banks, unsigned dram_bnk_i
    nbytes = mf->get_data_size();
 
    timestamp = gpu_tot_sim_cycle + gpu_sim_cycle;
-   addr = mf->get_addr();
+   addr = mf->get_physic_addr();
    insertion_time = (unsigned) gpu_sim_cycle;
    rw = data->get_is_write()?WRITE:READ;
 }

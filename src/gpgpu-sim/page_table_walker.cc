@@ -20,7 +20,7 @@ bool latency_queue::add(mem_fetch *v, unsigned long long time)
     {
         throw std::runtime_error("can't exceed the limit of pagewalker size\n");
     }
-    printdbg_tlb("l2 pw add,mf mf: %p,addr:%llX\n", v, v->get_addr());
+    printdbg_tlb("l2 pw add,mf mf: %p,addr:%llX\n", v, v->get_physic_addr());
 
     auto temp = std::make_pair(time + m_latency, v);
 
@@ -48,7 +48,7 @@ mem_fetch *latency_queue::get() const
 {
     assert(!m_elements.empty());
     auto v = m_elements.front().second;
-    //printdbg_tlb("l2 pw get,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_addr());
+    //printdbg_tlb("l2 pw get,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_physic_addr());
     return v;
 }
 //extern std::unordered_map<mem_fetch*,unsigned long long> mf_map;
@@ -61,7 +61,7 @@ mem_fetch *latency_queue::pop()
     fflush(stdout);
     fflush(stderr);
 #endif
-    //printdbg_tlb("l2 pw pop,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_addr());
+    //printdbg_tlb("l2 pw pop,mf iD: %u,mf:%llX\n",v->sm_next_mf_request_uid,v->get_physic_addr());
     m_elements.pop();
     return v;
 }
@@ -252,7 +252,7 @@ void real_page_table_walker::cycle()
             auto subpartition_id = mf->get_sub_partition_id();
 
             ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores + 1, mf, 8u);
-            printdbg_PW("push mf to icnt:mf->address:%llx,from %u,to: %u\n", mf->get_addr(), global_l2_tlb_index, subpartition_id + global_n_cores + 1);
+            printdbg_PW("push mf to icnt:mf->address:%llx,from %u,to: %u\n", mf->get_physic_addr(), global_l2_tlb_index, subpartition_id + global_n_cores + 1);
         }
         else
         {
@@ -330,7 +330,7 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
     else
     {
         /* code */
-        auto addr = child_mf->get_addr();
+        auto addr = child_mf->get_physic_addr();
         auto n_set = m_config.cache_size;
         auto n_assoc = m_config.cache_assoc;
 
@@ -470,7 +470,7 @@ mem_fetch *real_page_table_walker::recv_probe() const
 
 void real_page_table_walker::fill(mem_fetch *mf)
 {
-    auto addr = mf->get_addr();
+    auto addr = mf->get_physic_addr();
     auto n_set = m_config.cache_size;
     auto n_assoc = m_config.cache_assoc;
 

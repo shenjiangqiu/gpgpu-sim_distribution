@@ -230,7 +230,7 @@ void tag_array::init( int core_id, int type_id )
 
 void tag_array::add_pending_line(mem_fetch *mf){
 	assert(mf);
-	new_addr_type addr = m_config.block_addr(mf->get_addr());
+	new_addr_type addr = m_config.block_addr(mf->get_physic_addr());
 	line_table::const_iterator i = pending_lines.find(addr);
 	if ( i == pending_lines.end() ) {
 		pending_lines[addr] = mf->get_inst().get_uid();
@@ -239,7 +239,7 @@ void tag_array::add_pending_line(mem_fetch *mf){
 
 void tag_array::remove_pending_line(mem_fetch *mf){
 	assert(mf);
-	new_addr_type addr = m_config.block_addr(mf->get_addr());
+	new_addr_type addr = m_config.block_addr(mf->get_physic_addr());
 	line_table::const_iterator i = pending_lines.find(addr);
 	if ( i != pending_lines.end() ) {
 		pending_lines.erase(addr);
@@ -1022,7 +1022,7 @@ void baseline_cache::send_read_request(new_addr_type addr, new_addr_type block_a
 void baseline_cache::send_read_request(new_addr_type addr, new_addr_type block_addr, unsigned cache_index, mem_fetch *mf,
 		unsigned time, bool &do_miss, bool &wb, evicted_block_info &evicted, std::list<cache_event> &events, bool read_only, bool wa){
 
-	new_addr_type mshr_addr = m_config.mshr_addr(mf->get_addr());
+	new_addr_type mshr_addr = m_config.mshr_addr(mf->get_physic_addr());
     bool mshr_hit = m_mshrs.probe(mshr_addr);
     bool mshr_avail = !m_mshrs.full(mshr_addr);
     if ( mshr_hit && mshr_avail ) {
@@ -1044,7 +1044,7 @@ void baseline_cache::send_read_request(new_addr_type addr, new_addr_type block_a
         if(m_config.is_streaming() && m_config.m_cache_type == SECTOR){
 			m_tag_array->add_pending_line(mf);
 		}
-        m_extra_mf_fields[mf] = extra_mf_fields(mshr_addr,mf->get_addr(),cache_index, mf->get_data_size(), m_config);
+        m_extra_mf_fields[mf] = extra_mf_fields(mshr_addr,mf->get_physic_addr(),cache_index, mf->get_data_size(), m_config);
         mf->set_data_size( m_config.get_atom_sz() );
         mf->set_addr( mshr_addr );
         m_miss_queue.push_back(mf);
@@ -1139,7 +1139,7 @@ data_cache::wr_miss_wa_naive( new_addr_type addr,
                         enum cache_request_status status )
 {
     new_addr_type block_addr = m_config.block_addr(addr);
-    new_addr_type mshr_addr = m_config.mshr_addr(mf->get_addr());
+    new_addr_type mshr_addr = m_config.mshr_addr(mf->get_physic_addr());
 
     // Write allocate, maximum 3 requests (write miss, read request, write back request)
     // Conservatively ensure the worst-case request can be handled this cycle
@@ -1167,7 +1167,7 @@ data_cache::wr_miss_wa_naive( new_addr_type addr,
     //    return RESERVATION_FAIL;
 
     const mem_access_t *ma = new  mem_access_t( m_wr_alloc_type,
-                        mf->get_addr(),
+                        mf->get_physic_addr(),
 						m_config.get_atom_sz(),
                         false, // Now performing a read
                         mf->get_access_warp_mask(),
@@ -1215,7 +1215,7 @@ data_cache::wr_miss_wa_fetch_on_write( new_addr_type addr,
                         enum cache_request_status status )
 {
     new_addr_type block_addr = m_config.block_addr(addr);
-    new_addr_type mshr_addr = m_config.mshr_addr(mf->get_addr());
+    new_addr_type mshr_addr = m_config.mshr_addr(mf->get_physic_addr());
 
 	if(mf->get_access_byte_mask().count() == m_config.get_atom_sz())
 	{
@@ -1280,7 +1280,7 @@ data_cache::wr_miss_wa_fetch_on_write( new_addr_type addr,
 		  }
 
 		  const mem_access_t *ma = new  mem_access_t( m_wr_alloc_type,
-									mf->get_addr(),
+									mf->get_physic_addr(),
 									m_config.get_atom_sz(),
 									false, // Now performing a read
 									mf->get_access_warp_mask(),
@@ -1669,7 +1669,7 @@ void tex_cache::cycle(){
             // hit:
             assert( m_cache[e.m_cache_index].m_valid );
             assert( m_cache[e.m_cache_index].m_block_addr
-                == m_config.block_addr(e.m_request->get_addr()) );
+                == m_config.block_addr(e.m_request->get_physic_addr()) );
             m_result_fifo.push( e.m_request );
             m_fragment_fifo.pop();
         }
@@ -1707,7 +1707,7 @@ void tex_cache::fill( mem_fetch *mf, unsigned time )
     assert( !r.m_ready );
     r.m_ready = true;
     r.m_time = time;
-    assert( r.m_block_addr == m_config.block_addr(mf->get_addr()) );
+    assert( r.m_block_addr == m_config.block_addr(mf->get_physic_addr()) );
 }
 
 void tex_cache::display_state( FILE *fp ) const

@@ -914,7 +914,7 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
                  //debugs
                 auto warp_id = tlb_mf->get_wid();
                 std::list<cache_event> events;
-                printdbg_fetch("new tlb_mf fetch probe: tlb_mf:%llX\n", tlb_mf->get_addr());
+                printdbg_fetch("new tlb_mf fetch probe: tlb_mf:%llX\n", tlb_mf->get_physic_addr());
                 auto physic_addr = tlb_mf->get_physic_addr();
                 auto pc = tlb_mf->get_virtual_addr() - PROGRAM_MEM_START;
 
@@ -1768,8 +1768,8 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue( cache_t *cache, war
     //const mem_access_t &access = inst.accessq_back();
     mem_fetch *mf = m_mf_allocator->alloc(inst,inst.accessq_back());
     std::list<cache_event> events;
-    enum cache_request_status status = cache->access(mf->get_addr(),mf,gpu_sim_cycle+gpu_tot_sim_cycle,events);
-    return process_cache_access( cache, mf->get_addr(), inst, events, mf, status );
+    enum cache_request_status status = cache->access(mf->get_physic_addr(),mf,gpu_sim_cycle+gpu_tot_sim_cycle,events);
+    return process_cache_access( cache, mf->get_physic_addr(), inst, events, mf, status );
 }
 
 void ldst_unit::process_memory_access_queue_l1cache( l1_cache* cache, mem_fetch *mf )
@@ -1809,8 +1809,8 @@ void ldst_unit::process_memory_access_queue_l1cache( l1_cache* cache, mem_fetch 
     else
     {
 		std::list<cache_event> events;
-		enum cache_request_status status = cache->access(mf->get_addr(),mf,gpu_sim_cycle+gpu_tot_sim_cycle,events);
-		process_cache_access( cache, mf->get_addr(), inst, events, mf, status );
+		enum cache_request_status status = cache->access(mf->get_physic_addr(),mf,gpu_sim_cycle+gpu_tot_sim_cycle,events);
+		process_cache_access( cache, mf->get_physic_addr(), inst, events, mf, status );
     }
 }
 
@@ -1821,7 +1821,7 @@ void ldst_unit::L1_latency_queue_cycle()
     {
 		    mem_fetch* mf_next = l1_latency_queue[0];
 			std::list<cache_event> events;
-			enum cache_request_status status = m_L1D->access(mf_next->get_addr(),mf_next,gpu_sim_cycle+gpu_tot_sim_cycle,events);
+			enum cache_request_status status = m_L1D->access(mf_next->get_physic_addr(),mf_next,gpu_sim_cycle+gpu_tot_sim_cycle,events);
 
 		   bool write_sent = was_write_sent(events);
 		   bool read_sent = was_read_sent(events);
@@ -1934,7 +1934,7 @@ bool ldst_unit::memory_cycle(  mem_stage_stall_type &stall_reason, mem_stage_acc
        // bypass L1 cache
        unsigned control_size = inst.is_store() ? WRITE_PACKET_SIZE : READ_PACKET_SIZE;
        unsigned size = access_size + control_size;
-       //printf("Interconnect:Addr: %x, size=%d\n",access.get_addr(),size);
+       //printf("Interconnect:Addr: %x, size=%d\n",access.get_physic_addr(),size);
        if( m_icnt->full(size, inst.is_store() || inst.isatomic()) ) {
            stall_cond = ICNT_RC_FAIL;
        } else {
@@ -2501,12 +2501,12 @@ void ldst_unit::cycle()
        mem_fetch *mf = m_response_fifo.front();
        assert(m_l1_tlb);
        assert(mf);
-       printdbg_tlb("access from icnt,mf:%llX\n",mf->get_addr());
+       printdbg_tlb("access from icnt,mf:%llX\n",mf->get_physic_addr());
        assert(m_l1_tlb->outgoing_size()<100);
        if (m_l1_tlb->is_outgoing(mf)) //this is a tlb_resquest
        {
            assert(!mf->finished_tlb);
-           printdbg_tlb("m_l1_tlb accept this mf:%llX\n",mf->get_addr());
+           printdbg_tlb("m_l1_tlb accept this mf:%llX\n",mf->get_physic_addr());
            m_l1_tlb->del_outgoing(mf);
            //mf will fill the l1 tlb cache, and return to tlb_response queue;
            m_l1_tlb->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
@@ -2522,7 +2522,7 @@ void ldst_unit::cycle()
        else //fill the l1D cache
        {
            assert(mf->finished_tlb);
-           printdbg_tlb("l1D access this mf:%llX\n",mf->get_addr());
+           printdbg_tlb("l1D access this mf:%llX\n",mf->get_physic_addr());
 
            if (mf->get_access_type() == TEXTURE_ACC_R)
            {
@@ -4310,19 +4310,21 @@ void simt_core_cluster::get_L1T_sub_stats(struct cache_sub_stats &css) const{
 
 void shader_core_ctx::checkExecutionStatusAndUpdate(warp_inst_t &inst, unsigned t, unsigned tid)
 {
-    if(inst.isatomic())
-           m_warp[inst.warp_id()].inc_n_atomic();
-        if (inst.space.is_local() && (inst.is_load() || inst.is_store())) {
-            new_addr_type localaddrs[MAX_ACCESSES_PER_INSN_PER_THREAD];
-            unsigned num_addrs;
-            num_addrs = translate_local_memaddr(inst.get_addr(t), tid, m_config->n_simt_clusters*m_config->n_simt_cores_per_cluster,
-                   inst.data_size, (new_addr_type*) localaddrs );
-            inst.set_addr(t, (new_addr_type*) localaddrs, num_addrs);
-        }
-        if ( ptx_thread_done(tid) ) {
-            m_warp[inst.warp_id()].set_completed(t);
-            m_warp[inst.warp_id()].ibuffer_flush();
-        }
+    if (inst.isatomic())
+        m_warp[inst.warp_id()].inc_n_atomic();
+    if (inst.space.is_local() && (inst.is_load() || inst.is_store()))
+    {
+        new_addr_type localaddrs[MAX_ACCESSES_PER_INSN_PER_THREAD];
+        unsigned num_addrs;
+        num_addrs = translate_local_memaddr(inst.get_addr(t), tid, m_config->n_simt_clusters * m_config->n_simt_cores_per_cluster,
+                                            inst.data_size, (new_addr_type *)localaddrs);
+        inst.set_addr(t, (new_addr_type *)localaddrs, num_addrs);
+    }
+    if (ptx_thread_done(tid))
+    {
+        m_warp[inst.warp_id()].set_completed(t);
+        m_warp[inst.warp_id()].ibuffer_flush();
+    }
 
     // PC-Histogram Update 
     unsigned warp_id = inst.warp_id(); 
