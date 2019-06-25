@@ -948,12 +948,18 @@ const unsigned MAX_ACCESSES_PER_INSN_PER_THREAD = 8;
 
 class warp_inst_t: public inst_t {
 public:
+    static unsigned _id;
     // constructors
+    unsigned _m_id;
     warp_inst_t() 
     {
+        _m_id=_id;
+        _id++;
+
         m_uid=0;
         m_empty=true; 
         m_config=NULL; 
+
     }
     warp_inst_t( const core_config *config ) 
     { 

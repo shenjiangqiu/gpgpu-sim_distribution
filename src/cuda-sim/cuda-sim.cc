@@ -412,6 +412,7 @@ addr_t generic_to_global( addr_t addr )
 void* gpgpu_t::gpu_malloc( size_t size )
 {
    auto result=global_page_manager->cudaMalloc(size);//return virtual address 
+   assert(result!=0);
    //unsigned long long result = m_dev_malloc;
    if(g_debug_execution >= 3) {
       printf("GPGPU-Sim PTX: allocating %zu bytes on GPU starting at address 0x%Lx\n", size, m_dev_malloc );
@@ -1666,6 +1667,9 @@ void ptx_thread_info::ptx_exec_inst( warp_inst_t &inst, unsigned lane_id)
    }
 
    if (pI->get_opcode() == TEX_OP) {
+      if(inst.op==LOAD_OP||inst.op==STORE_OP){
+           printf("this is mem");
+        }
       inst.set_addr(lane_id, last_eaddr() );
       assert( inst.space == last_space() );
       insn_data_size = get_tex_datasize(pI, this); // texture obtain its data granularity from the texture info 
@@ -1727,7 +1731,10 @@ void ptx_thread_info::ptx_exec_inst( warp_inst_t &inst, unsigned lane_id)
       if(!((inst_opcode==MMA_LD_OP||inst_opcode==MMA_ST_OP)))
       {
    	  inst.space = insn_space;
-          inst.set_addr(lane_id, insn_memaddr);
+        if(inst.op==LOAD_OP||inst.op==STORE_OP){
+           printf("this is mem");
+        }
+          inst.set_addr(lane_id, insn_memaddr);//why that is zero!?
           inst.data_size = insn_data_size; // simpleAtomicIntrinsics
           assert( inst.memory_op == insn_memory_op );
       } 
