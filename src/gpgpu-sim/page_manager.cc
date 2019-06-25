@@ -176,7 +176,7 @@ void *page_manager::cudaMalloc(size_t size) //redesigned at 6/3
         assert(((last_page - first_page) & 4095) == 0);
         allocate_page(first_page, ((last_page - first_page) >> 12) + 1); //find out physic pages.
     }
-
+    assert(new_range.get_start()!=0);
     return (void *)new_range.get_start();
 }
 

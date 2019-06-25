@@ -106,7 +106,7 @@ public:
    bool is_write() {return get_is_write();}
    void set_addr(new_addr_type addr) { physic_addr=addr; }
    new_addr_type get_virtual_addr() const { return virtual_addr; }
-   new_addr_type get_addr() const { return physic_addr; }
+   //new_addr_type get_addr() const { return physic_addr; }
 
    new_addr_type get_physic_addr() const{return physic_addr;}
    unsigned get_access_size() const { return  m_access.get_size(); }

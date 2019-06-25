@@ -406,10 +406,10 @@ void memory_sub_partition::cache_cycle( unsigned cycle )
             bool port_free = m_L2cache->data_port_free(); 
             if ( !output_full && port_free ) {
                 std::list<cache_event> events;
-                enum cache_request_status status = m_L2cache->access(mf->get_addr(),mf,gpu_sim_cycle+gpu_tot_sim_cycle+m_memcpy_cycle_offset,events);
+                enum cache_request_status status = m_L2cache->access(mf->get_physic_addr(),mf,gpu_sim_cycle+gpu_tot_sim_cycle+m_memcpy_cycle_offset,events);
                 bool write_sent = was_write_sent(events);
                 bool read_sent = was_read_sent(events);
-                MEM_SUBPART_DPRINTF("Probing L2 cache Address=%llx, status=%u\n", mf->get_addr(), status); 
+                MEM_SUBPART_DPRINTF("Probing L2 cache Address=%llx, status=%u\n", mf->get_physic_addr(), status); 
 
                 if ( status == HIT ) {
                     if( !write_sent ) {
@@ -601,7 +601,7 @@ std::vector<mem_fetch*> memory_sub_partition::breakdown_request_to_sector_reques
 		} else if (mf->get_data_size() == 64 && mf->get_access_sector_mask().to_string() == "0011") {
 			start=0; end=1;
 		} else if (mf->get_data_size() == 64 && (mf->get_access_sector_mask().to_string() == "1111" || mf->get_access_sector_mask().to_string() == "0000")) {
-			if(mf->get_addr() % 128 == 0) {
+			if(mf->get_physic_addr() % 128 == 0) {
 				start=0; end=1;
 			} else {
 				start=2; end=3;
@@ -609,7 +609,7 @@ std::vector<mem_fetch*> memory_sub_partition::breakdown_request_to_sector_reques
 		} else
 			{
 			    printf("Invalid sector received, address = 0x%06x, sector mask = %s, data size = %d",
-			    		mf->get_addr(), mf->get_access_sector_mask(), mf->get_data_size());
+			    		mf->get_physic_addr(), mf->get_access_sector_mask(), mf->get_data_size());
 				assert(0 && "Undefined sector mask is received");
 			}
 
@@ -621,7 +621,7 @@ std::vector<mem_fetch*> memory_sub_partition::breakdown_request_to_sector_reques
 		for(unsigned j=start, i=0; j<= end ; ++j, ++i){
 
 			const mem_access_t *ma = new  mem_access_t( mf->get_access_type(),
-									mf->get_addr() + SECTOR_SIZE*i,
+									mf->get_physic_addr() + SECTOR_SIZE*i,
 									SECTOR_SIZE,
 									mf->is_write(),
 									mf->get_access_warp_mask(),
@@ -642,7 +642,7 @@ std::vector<mem_fetch*> memory_sub_partition::breakdown_request_to_sector_reques
 		}
 	} else {
 		 printf("Invalid sector received, address = 0x%06x, sector mask = %d, byte mask = , data size = %d",
-					    		mf->get_addr(), mf->get_access_sector_mask().count(), mf->get_data_size());
+					    		mf->get_physic_addr(), mf->get_access_sector_mask().count(), mf->get_data_size());
 		 assert(0 && "Undefined data size is received");
 	}
 

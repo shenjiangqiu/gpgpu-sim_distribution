@@ -3182,6 +3182,10 @@ void mma_st_impl( const ptx_instruction *pI, core_t *core, warp_inst_t &inst )
    	
 	delete [] v;
    	inst.space = space;
+      assert(mem_txn_addr!=0);
+      if(inst.op==LOAD_OP||inst.op==STORE_OP){
+           printf("this is mem");
+        }
    	inst.set_addr(thrd, (new_addr_type *)mem_txn_addr , num_mem_txn);
 
 	if((type==F16_TYPE)&&(wmma_layout==COL))//check the profiling xls for details
@@ -3326,6 +3330,10 @@ void mma_ld_impl( const ptx_instruction *pI, core_t *core, warp_inst_t &inst )
 	}
 	//generate timing memory request
    	inst.space = space;
+      assert(mem_txn_addr!=0);
+      if(inst.op==LOAD_OP||inst.op==STORE_OP){
+           printf("this is mem");
+        }
    	inst.set_addr(thrd, (new_addr_type *)mem_txn_addr , num_mem_txn);
 
 	if((wmma_type==LOAD_C)&&(type==F16_TYPE)&&(wmma_layout==COL))//memory address is scattered, check the profiling xls for more detail.
