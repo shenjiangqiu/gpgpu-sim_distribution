@@ -64,13 +64,13 @@ std::ostream &operator<<(std::ostream &out, const range &m_range);
 
 std::ostream &operator<<(std::ostream &out, const range_set_compare_by_size &freeranges);
 //stream end
-constexpr addr_type physic_start = 0x000010000000;
-constexpr addr_type physic_end = 0x0000c0000000;
-constexpr addr_type pagetable_start = 0x0000c0000000;
-constexpr addr_type pagetable_end = 0xcfffffffffff;
-constexpr addr_type code_start = 0x0000f0000000; //that is get from test.
-constexpr addr_type virtual_start = 0x000f00000000;
-constexpr addr_type virtual_end = 0xf00000000000;
+constexpr addr_type physic_start =      0x0000c0000000;
+constexpr addr_type physic_end =        0x0000F0000000;//that's code start
+constexpr addr_type pagetable_start =   0x000000c00000;
+constexpr addr_type pagetable_end =     0x000000FFFFFF;
+constexpr addr_type code_start =        0x0000f0000000; //that is get from test.
+constexpr addr_type virtual_start =     0x0000c0000000;
+constexpr addr_type virtual_end =       0x0000F0000000;
 class page_table;
 class page_manager
 {
