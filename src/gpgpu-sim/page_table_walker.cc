@@ -154,6 +154,8 @@ void real_page_table_walker::cycle()
     if (working_walker.size() < m_config.walker_size and !waiting_queue.empty()) //it's from waiting queue, to working set.
     {
         auto mf = waiting_queue.front();
+        auto vir_addr=mf->get_virtual_addr();
+        printdbg_PW("new mf to enter walker: mf addr:%llx.",vir_addr);
         waiting_queue.pop();
         auto new_mf =mf->get_copy();
         total_mf++;
@@ -268,6 +270,8 @@ void real_page_table_walker::cycle()
         if (child_mf)
         {
             auto mf_origin = child_mf->pw_origin;
+            auto vir_addr=mf_origin->get_virtual_addr();
+            printdbg_PW("from icnt to pagewalker! origin mf:%llx,level:%u\n",vir_addr,std::get<0>(working_walker[mf_origin]));
             auto &level = std::get<0>(working_walker[mf_origin]);
             if (level == page_table_level::L1_LEAF)
             {
@@ -277,6 +281,7 @@ void real_page_table_walker::cycle()
 
 
                 working_walker.erase(mf_origin);
+                
                 response_queue.push(mf_origin);
                 assert(response_queue.size() < 10);
             }
@@ -386,7 +391,7 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
                     }
                     case VALID:
                     {
-                        printdbg_tlb("push to response queu: mf:%llX\n", child_mf->get_virtual_addr());
+                        printdbg_tlb("child mf hit: mf:%llX\n", child_mf->get_virtual_addr());
 
                         return tlb_result::hit;
                         break;

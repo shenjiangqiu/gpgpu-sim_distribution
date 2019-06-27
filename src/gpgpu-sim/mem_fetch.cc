@@ -60,7 +60,7 @@ mem_fetch::mem_fetch( const mem_access_t &access,
     #ifdef TLBDEBUG
     m_nums++;
     #endif
-    printdbg_tlb("mem_fetch(),mf total nums: %d,current id %u\n",m_nums,sm_next_mf_request_uid);
+   // printdbg_tlb("mem_fetch(),mf total nums: %d,current id %u\n",m_nums,sm_next_mf_request_uid);
     
 
    m_request_uid = sm_next_mf_request_uid++;
@@ -100,9 +100,9 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    original_wr_mf = m_original_wr_mf;
    //mf_map[this]=this->get_addr();
    #ifdef TLBDEBUG
-   auto addr=this->get_addr();
+   auto addr=this->get_physic_addr();
    #endif   
-   printdbg_tlb("mf: %p,addr:%llX\n",this,addr);
+   //printdbg_tlb("mf: %p,addr:%llX\n",this,addr);
 }
 
 mem_fetch::~mem_fetch()
@@ -115,7 +115,7 @@ mem_fetch::~mem_fetch()
     #ifdef TLBDEBUG
     m_nums--;
     #endif
-    printdbg_tlb("~mem_fetch: mf:%p ,nums:%d\n",this,m_nums);
+   // printdbg_tlb("~mem_fetch: mf:%p ,nums:%d\n",this,m_nums);
 }
 
 #define MF_TUP_BEGIN(X) static const char* Status_str[] = {
