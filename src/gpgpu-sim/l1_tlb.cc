@@ -6,11 +6,11 @@ extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
 #define TLBDEBUG
 #define PWDEBUG
-#include"debug_macro.h"
-l1_tlb::l1_tlb(l1_tlb_config &config, page_manager* tlb_page_manager) : m_config(config),
-                                                                                       m_page_manager(tlb_page_manager),
-                                                                                       m_mshrs(std::make_shared<mshr_table>(config.n_mshr_entries, config.n_mshr_max_merge)),
-                                                                                       m_tag_arrays(config.n_sets * config.n_associate)
+#include "debug_macro.h"
+l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager) : m_config(config),
+                                                                        m_page_manager(tlb_page_manager),
+                                                                        m_mshrs(std::make_shared<mshr_table>(config.n_mshr_entries, config.n_mshr_max_merge)),
+                                                                        m_tag_arrays(config.n_sets * config.n_associate)
 {
     for (unsigned i = 0; i < config.n_sets * config.n_associate; i++)
     {
@@ -93,16 +93,27 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         decltype(start) hit_line;
         decltype(start) last_line;
         auto mask = mf->get_access_sector_mask();
+        bool all_reserved = true;
         printdbg_tlb("l1 access mf:%llX\n", mf->get_virtual_addr());
         for (; start < end; start++)
         {
-            if (!(*start)->is_invalid_line())//previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
+            if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
             {
-                if ((*start)->get_last_access_time() < oldest_access_time)
+                auto status = (*start)->get_status(mask);
+                if (status != RESERVED)//for eviction
                 {
-                    oldest_access_time = (*start)->get_last_access_time();
-                    last_line = start;
+                    assert(status == VALID);
+                    all_reserved = false;
+                    if ((*start)->get_last_access_time() < oldest_access_time)
+                    {
+                        oldest_access_time = (*start)->get_last_access_time();
+                        last_line = start;
+                    }
+                }else{
+                    assert(time - (*start)->get_alloc_time() < 5000);
+
                 }
+
                 if ((*start)->m_tag == tag)
                 {
 
@@ -110,6 +121,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                     switch (status)
                     {
                     case RESERVED:
+                        assert((time - (*start)->get_alloc_time()) < 5000); //shouldn't be always reserved
                         if (m_mshrs->full(block_addr))
                         {
                             printdbg_tlb("l1 hit_reserved and mshr full\n");
@@ -117,16 +129,16 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                         }
                         else
                         {
-                            m_mshrs->add<2>(block_addr, mf);//adding to existing entry
+                            m_mshrs->add<2>(block_addr, mf); //adding to existing entry
                             printdbg_tlb("l1 hit_reserved and push to mshr\n");
                             (*start)->set_last_access_time(time, mask);
-                            mf->finished_tlb=true;
+                            mf->finished_tlb = true;
                             return tlb_result::hit_reserved;
                         }
                         break;
                     case VALID:
                         printdbg_tlb("push to response queu: mf: %llX\n", mf->get_virtual_addr());
-                        mf->finished_tlb=true;
+                        mf->finished_tlb = true;
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                         return tlb_result::hit;
 
@@ -143,12 +155,17 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
             }
             else
             { //any time find the valid line, get it!
+                all_reserved = false;
                 if (has_free_line == false)
                 {
                     has_free_line = true;
                     free_line = start;
                 }
             }
+        }
+        if (all_reserved)
+        {
+            return tlb_result::resfail;
         }
         // when run to here, means no hit line found,It's a miss;
         if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
@@ -159,8 +176,8 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         auto next_line = has_free_line ? free_line : last_line;
         printdbg_tlb("miss and allocate, send to miss queue and mshr, mf:%llX\n", mf->get_virtual_addr());
         (*next_line)->allocate(tag, block_addr, time, mask);
-        m_mshrs->add<1>(block_addr, mf);//adding to new entry
-        m_miss_queue.push_back(mf); //miss
+        m_mshrs->add<1>(block_addr, mf); //adding to new entry
+        m_miss_queue.push_back(mf);      //miss
         outgoing_mf.insert(mf);
         return tlb_result::miss;
     }
@@ -183,7 +200,7 @@ void l1_tlb::cycle()
         {
             printdbg_tlb("from miss queue to icnt,mftpc: %u;mf :%llX\n", mf->get_tpc(), mf->get_virtual_addr());
             ::icnt_push(mf->get_tpc(), m_config.m_icnt_index, mf, size);
-            printdbg_PW("push from core:%u,send to %u\n",mf->get_tpc(),m_config.m_icnt_index);
+            printdbg_PW("push from core:%u,send to %u\n", mf->get_tpc(), m_config.m_icnt_index);
             m_miss_queue.pop_front(); //successfully pushed to icnt
         }
     }
@@ -204,7 +221,7 @@ void l1_tlb::fill(mem_fetch *mf, unsigned long long time)
     auto set_index = (v_addr >> m_page_size_log2) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
     auto tag = v_addr & (~static_cast<addr_type>(m_config.m_page_size - 1));           //only need the bits besides page offset
     auto block_addr = v_addr >> m_page_size_log2;
-    printdbg_tlb("l1 tlb fill, mf:%llX, core id:%u, blockaddr:%llX\n",mf->get_virtual_addr(),mf->get_sid(),block_addr);
+    printdbg_tlb("l1 tlb fill, mf:%llX, core id:%u, blockaddr:%llX\n", mf->get_virtual_addr(), mf->get_sid(), block_addr);
     bool has_atomic;
     m_mshrs->mark_ready(block_addr, has_atomic);
     auto start = m_tag_arrays.begin() + set_index * n_assoc;
@@ -224,15 +241,17 @@ void l1_tlb::fill(mem_fetch *mf, unsigned long long time)
             }
         }
     }
- 
-    assert(done&& "fill must succeed");
+
+    assert(done && "fill must succeed");
     //throw std::runtime_error("can't be here");
 }
-unsigned int l1_tlb::outgoing_size(){
+unsigned int l1_tlb::outgoing_size()
+{
     return outgoing_mf.size();
 }
 
-void l1I_tlb_config::reg_option(option_parser_t opp){
+void l1I_tlb_config::reg_option(option_parser_t opp)
+{
     option_parser_register(opp, "-l1Itlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "64");
     option_parser_register(opp, "-l1Itlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
     option_parser_register(opp, "-l1Itlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "2");

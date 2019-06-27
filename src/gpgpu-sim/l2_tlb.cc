@@ -18,12 +18,12 @@ unsigned global_walkers;
 l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
                                        m_page_table_walker(new real_page_table_walker(config.m_page_table_walker_config)),
                                        m_page_manager(global_page_manager),
-                                       m_mshrs(std::make_shared<mshr_table>(m_config.n_mshr_entries, m_config.n_mshr_max_merge)),
+                                       m_mshrs(new mshr_table(m_config.n_mshr_entries, m_config.n_mshr_max_merge)),
                                        m_tag_arrays(m_config.n_sets * m_config.n_associate) //null shared point
 {
     for (unsigned i = 0; i < m_config.n_sets * m_config.n_associate; i++)
     {
-        m_tag_arrays[i] = std::make_shared<line_cache_block>();
+        m_tag_arrays[i] = new line_cache_block;
     }
     global_l2_tlb_index = m_config.m_icnt_index;
     global_walkers = m_config.m_page_table_walker_config.walker_size;
@@ -87,6 +87,8 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
     else
     {
         /* code */
+        printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+
         auto v_addr = mf->get_virtual_addr();
         auto m_page_size_log2 = m_config.m_page_size_log2;
         auto n_set = m_config.n_sets;
@@ -106,16 +108,28 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
         decltype(start) hit_line;
         decltype(start) last_line;
         auto mask = mf->get_access_sector_mask();
+        bool all_reserved = true;
         for (; start < end; start++)
         {
             if (!(*start)->is_invalid_line())
             {
-                if ((*start)->get_last_access_time() < oldest_access_time)
+                auto status = (*start)->get_status(mask);
+                if (status != RESERVED)
                 {
-                    oldest_access_time = (*start)->get_last_access_time();
-                    last_line = start;
+                    assert(status == VALID);
+                    all_reserved = false;
+                    if ((*start)->get_last_access_time() < oldest_access_time)
+                    {
+                        oldest_access_time = (*start)->get_last_access_time();
+                        last_line = start;
+                    }
                 }
-                if ((*start)->m_tag == tag) //ok we find
+                else
+                {
+                    assert(time - (*start)->get_alloc_time() < 5000);
+                }
+
+                if ((*start)->m_tag == tag) //ok we find// this is what the identity entry/try to find that entry
                 {
 
                     auto status = (*start)->get_status(mask);
@@ -136,6 +150,8 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                         }
                         break;
                     case VALID:
+
+                        all_reserved = false;
                         printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                         assert(m_response_queue.size() < 20);
@@ -154,6 +170,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
             }
             else
             { //any time find the valid line, get it!
+                all_reserved = false;
                 if (has_free_line == false)
                 {
                     has_free_line = true;
@@ -162,12 +179,18 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
             }
         }
         // when run to here, means no hit line found,It's a miss;
+        if (all_reserved)
+        {
+            return tlb_result::resfail;
+        }
         if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
         {
             return tlb_result::resfail;
         }
         auto next_line = has_free_line ? free_line : last_line;
         (*next_line)->allocate(tag, block_addr, time, mask);
+        printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+
         m_mshrs->add<1>(block_addr, mf);
         m_miss_queue.push_back(mf);
         assert(m_miss_queue.size() < 10);
@@ -190,7 +213,7 @@ void l2_tlb::cycle()
     { //from response queue to icnt
         auto mf = m_response_queue.front();
         printdbg_tlb("send mf:%llX, to icnt\n", mf->get_virtual_addr());
-        auto size = 8+8; //ctrl size plus one tlb targe address
+        auto size = 8 + 8; //ctrl size plus one tlb targe address
         if (::icnt_has_buffer(m_config.m_icnt_index, size))
         {
             ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
@@ -207,7 +230,7 @@ void l2_tlb::cycle()
         printdbg_tlb("send m_mshr next access to m response queue\n");
         m_response_queue.push_back(m_mshrs->next_access());
         assert(m_response_queue.size() < 100);
-        printdbg_tlb("the mf is:%llX\n", m_response_queue.back()->get_addr());
+        printdbg_tlb("the mf is:%llX\n", m_response_queue.back()->get_virtual_addr());
     }
     while (m_page_table_walker->ready())
     { //from page_table_walker to l2 tlb
@@ -219,6 +242,7 @@ void l2_tlb::cycle()
     if (!m_miss_queue.empty()) //from l2tlb to page walker/different from l1 tlb
     {                          //send the request to
         auto mf = m_miss_queue.front();
+        auto vir_addr = mf->get_virtual_addr();
         printdbg_tlb("sending mf:%llX to page walker\n", mf->get_virtual_addr());
         if (m_page_table_walker->free())
         {
@@ -245,7 +269,7 @@ void l2_tlb::cycle()
             }
             else
             {
-                printdbg_tlb("get mf from icnt!access mf:%llX,from cluster%u\n", mf->get_virtual_addr(),mf->get_tpc());
+                printdbg_tlb("get mf from icnt!access mf:%llX,from cluster%u\n", mf->get_virtual_addr(), mf->get_tpc());
                 m_recv_buffer.push(mf);
                 printdbg_PW("m recv buffer size:%lu\n", m_recv_buffer.size());
             }
@@ -277,6 +301,7 @@ void l2_tlb::cycle()
 }
 void l2_tlb::fill(mem_fetch *mf, unsigned long long time) //that will be called from l2_tlb.cycle
 {
+    printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
     auto v_addr = mf->get_virtual_addr();
     auto m_page_size_log2 = m_config.m_page_size_log2;
     auto n_set = m_config.n_sets;

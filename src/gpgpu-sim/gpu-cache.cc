@@ -951,7 +951,7 @@ void baseline_cache::cycle(){
 void baseline_cache::fill(mem_fetch *mf, unsigned time){
 
 	if(m_config.m_mshr_type == SECTOR_ASSOC) {
-        printdbg_tlb("mf:%llX\n",mf->get_addr());
+        printdbg_tlb("mf:%llX\n",mf->get_physic_addr());
 	assert(mf->get_original_mf());
 	extra_mf_fields_lookup::iterator e = m_extra_mf_fields.find(mf->get_original_mf());
     assert( e != m_extra_mf_fields.end() );

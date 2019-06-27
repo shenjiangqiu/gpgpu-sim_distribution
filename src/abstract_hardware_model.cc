@@ -454,13 +454,6 @@ void warp_inst_t::generate_mem_accesses()
 
 void warp_inst_t::memory_coalescing_arch( bool is_write, mem_access_type access_type )
 {
-    if(m_per_scalar_thread[0].memreqaddr[0]==0){
-        printf("0!!");
-        for(unsigned i=0;i<32u;i++){
-            m_warp_active_mask.test(i)?printf("%d:",i):printf("x:");
-        }
-        printf("\n");
-    }
     // see the CUDA manual where it discusses coalescing rules before reading this
     unsigned segment_size = 0;
     unsigned warp_parts = m_config->mem_warp_parts;

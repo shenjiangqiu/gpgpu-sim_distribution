@@ -75,7 +75,8 @@ static void intersim2_push(unsigned input, unsigned output, void* data, unsigned
    #ifdef TLBDEBUG
    mf->icnt_from=input;
    #endif
-   printdbg_tlb("inct push,mf:%llX,in:%u,out:%u\n",mf->get_addr(),input,output);
+   auto vir_addr=mf->get_virtual_addr();
+   printdbg_tlb("inct push,mf:%llX,in:%u,out:%u\n",vir_addr,input,output);
    g_icnt_interface->Push(input, output, data, size);
 }
 

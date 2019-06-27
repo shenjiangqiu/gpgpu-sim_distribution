@@ -63,8 +63,8 @@ class l2_tlb{
     abstract_page_table_walker* m_page_table_walker;
     page_manager* m_page_manager;//init in constructor
     
-	std::shared_ptr<mshr_table> m_mshrs;
-    std::vector<std::shared_ptr<cache_block_t>> m_tag_arrays;
+	mshr_table* m_mshrs;
+    std::vector<cache_block_t*> m_tag_arrays;
     std::deque<mem_fetch*> m_miss_queue;
     //enum mem_fetch_status m_miss_queue_status;
     std::deque<mem_fetch*>  m_response_queue;
