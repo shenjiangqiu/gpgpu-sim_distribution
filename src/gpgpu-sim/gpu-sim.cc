@@ -166,8 +166,8 @@ void memory_config::reg_options(class OptionParser * opp)
                            "0");
     option_parser_register(opp, "-gpgpu_cache:dl2", OPT_CSTR, &m_L2_config.m_config_string, 
                    "unified banked L2 data cache config "
-                   " {<nsets>:<bsize>:<assoc>,<rep>:<wr>:<alloc>:<wr_alloc>,<mshr>:<N>:<merge>,<mq>}",
-                   "64:128:8,L:B:m:N,A:16:4,4");
+                   " {<type>:<nsets>:<bsize>:<assoc>,<rep>:<wr>:<alloc>:<wr_alloc>:<idxfunc>,<mshr>:<N>:<merge>,<mq>}",
+                   "N:4:128:4,L:R:f:N:L,A:2:32,4");
     option_parser_register(opp, "-gpgpu_cache:dl2_texture_only", OPT_BOOL, &m_L2_texure_only, 
                            "L2 cache used for texture only",
                            "1");
@@ -254,8 +254,8 @@ void shader_core_config::reg_options(class OptionParser * opp)
                    "4:256:4,L:R:f:N,A:2:32,4" );
     option_parser_register(opp, "-gpgpu_cache:dl1", OPT_CSTR, &m_L1D_config.m_config_string,
                    "per-shader L1 data cache config "
-                   " {<nsets>:<bsize>:<assoc>,<rep>:<wr>:<alloc>:<wr_alloc>,<mshr>:<N>:<merge>,<mq> | none}",
-                   "none" );
+                   " {<type>:<nsets>:<bsize>:<assoc>,<rep>:<wr>:<alloc>:<wr_alloc>:<idxfunc>,<mshr>:<N>:<merge>,<mq>}",
+                   "N:32:128:4,L:L:m:N:H,A:64:8,8" );
     option_parser_register(opp, "-l1_latency", OPT_UINT32, &m_L1D_config.l1_latency,
                  "L1 Hit Latency",
                  "0");
