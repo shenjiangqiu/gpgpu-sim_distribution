@@ -25,7 +25,7 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+#include"tlb_icnt.h"
 
 #include "gpu-sim.h"
 
@@ -1580,8 +1580,9 @@ void gpgpu_sim::cycle()
             if (mf) {
                if(mf->pw_origin!=NULL){//that should be send to l2_tlb//TODO need to set mf data size and read
                   unsigned response_size =8+8;
-                  if(::icnt_has_buffer(m_shader_config->mem2device(i),response_size)){
-                     ::icnt_push(m_shader_config->mem2device(i),global_l2_tlb_index,mf,response_size);
+                  if(global_tlb_icnt->free(m_shader_config->mem2device(i),global_l2_tlb_index)){
+                     // ::icnt_push(m_shader_config->mem2device(i),global_l2_tlb_index,mf,response_size);
+                     global_tlb_icnt->send(m_shader_config->mem2device(i),global_l2_tlb_index,mf,gpu_tot_sim_cycle+gpu_sim_cycle);
                      printdbg_PW("push pw requst from mem to l2 tlb\n");
                      m_memory_sub_partition[i]->pop();
                      partiton_replys_in_parallel_per_cycle++;
@@ -1621,6 +1622,7 @@ void gpgpu_sim::cycle()
 
    // L2 operations follow L2 clock domain
    unsigned partiton_reqs_in_parallel_per_cycle = 0;
+   static bool next_choose_icnt=true;
    if (clock_mask & L2) {
        m_power_stats->pwr_mem_stat->l2_cache_stats[CURRENT_STAT_IDX].clear();
       for (unsigned i=0;i<m_memory_config->m_n_mem_sub_partition;i++) {
@@ -1631,11 +1633,53 @@ void gpgpu_sim::cycle()
              gpu_stall_dramfull++;
           } else {
              auto output=m_shader_config->mem2device(i);
-             
-              mem_fetch* mf = (mem_fetch*) icnt_pop( m_shader_config->mem2device(i) );
-              m_memory_sub_partition[i]->push( mf, gpu_sim_cycle + gpu_tot_sim_cycle );
-              if(mf)
-            	  partiton_reqs_in_parallel_per_cycle++;
+             if (next_choose_icnt)//try data request first;
+             {
+
+                mem_fetch *mf = (mem_fetch *)icnt_pop(m_shader_config->mem2device(i));
+                m_memory_sub_partition[i]->push(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+                if (mf)
+                {
+
+                   partiton_reqs_in_parallel_per_cycle++;
+                   next_choose_icnt = false;
+                }
+                else
+                {
+                   if (global_tlb_icnt->ready(m_shader_config->mem2device(i), gpu_sim_cycle + gpu_tot_sim_cycle))
+                   {
+                      next_choose_icnt=true;
+
+                      auto mf = global_tlb_icnt->recv(m_shader_config->mem2device(i));
+                      m_memory_sub_partition[i]->push(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+                      if (mf)
+                         partiton_reqs_in_parallel_per_cycle++;
+                   }
+                }
+             }
+             else//try tlb first
+             {
+                if (global_tlb_icnt->ready(m_shader_config->mem2device(i), gpu_sim_cycle + gpu_tot_sim_cycle)) //tlb ready
+                {
+                   next_choose_icnt = true;
+
+                   auto mf = global_tlb_icnt->recv(m_shader_config->mem2device(i));
+                   m_memory_sub_partition[i]->push(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+                   if (mf)
+                      partiton_reqs_in_parallel_per_cycle++;
+                }
+                else //try to recv data request
+                {
+                   mem_fetch *mf = (mem_fetch *)icnt_pop(m_shader_config->mem2device(i));
+                   m_memory_sub_partition[i]->push(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+                   if (mf)
+                   {
+                      next_choose_icnt = false;
+
+                      partiton_reqs_in_parallel_per_cycle++;
+                   }
+                }
+             }
           }
           m_memory_sub_partition[i]->cache_cycle(gpu_sim_cycle+gpu_tot_sim_cycle);
           m_memory_sub_partition[i]->accumulate_L2cache_stats(m_power_stats->pwr_mem_stat->l2_cache_stats[CURRENT_STAT_IDX]);

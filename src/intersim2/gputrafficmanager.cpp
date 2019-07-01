@@ -28,7 +28,7 @@
 #include <sstream>
 #include <fstream>
 #include <limits> 
-
+#include "../gpgpu-sim/mem_fetch.h"
 #include "gputrafficmanager.hpp"
 #include "interconnect_interface.hpp"
 #include "globals.hpp"

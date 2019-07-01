@@ -1400,7 +1400,7 @@ struct shader_core_config : public core_config
          */
         int num_config_to_read = N_PIPELINE_STAGES - 2 * (!gpgpu_tensor_core_avail);
 
-        for (unsigned i = 0; i < num_config_to_read; i++)
+        for (int i = 0; i < num_config_to_read; i++)
         {
             assert(toks);
             ntok = sscanf(toks, "%d", &pipe_widths[i]);

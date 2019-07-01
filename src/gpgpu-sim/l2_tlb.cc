@@ -1,4 +1,5 @@
 #include "l2_tlb.hpp"
+#include"tlb_icnt.h"
 #include "gpu-cache.h"
 #include "icnt_wrapper.h"
 #include <memory>
@@ -154,7 +155,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                         all_reserved = false;
                         printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
-                        assert(m_response_queue.size() < 20);
+                        assert(m_response_queue.size() < 100);
                         return tlb_result::hit;
 
                         break;
@@ -214,9 +215,11 @@ void l2_tlb::cycle()
         auto mf = m_response_queue.front();
         printdbg_tlb("send mf:%llX, to icnt\n", mf->get_virtual_addr());
         auto size = 8 + 8; //ctrl size plus one tlb targe address
-        if (::icnt_has_buffer(m_config.m_icnt_index, size))
+        // if (::icnt_has_buffer(m_config.m_icnt_index, size))
+        if(global_tlb_icnt->free(m_config.m_icnt_index,mf->get_tpc()))
         {
-            ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
+            // ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
+            global_tlb_icnt->send(m_config.m_icnt_index,mf->get_tpc(),mf,gpu_sim_cycle+gpu_tot_sim_cycle);
             m_response_queue.pop_front();
             printdbg_tlb("successfully send to icnt\n");
         }
@@ -259,9 +262,9 @@ void l2_tlb::cycle()
     mem_fetch *mf = nullptr;
     if (m_recv_buffer.size() < m_config.recv_buffer_size) //recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
     {
-        mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
-        if (mf)
-        {
+        // mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
+        if(global_tlb_icnt->ready(m_config.m_icnt_index,gpu_sim_cycle+gpu_tot_sim_cycle)){
+            mf=global_tlb_icnt->recv(m_config.m_icnt_index);
             if (mf->pw_origin != NULL)
             { //it's a pw resquest
                 m_page_table_walker->send_to_recv_buffer(mf);
@@ -289,9 +292,11 @@ void l2_tlb::cycle()
         switch (result)
         {
         case tlb_result::resfail: //in this case , we do not pop m_recv_buffer
+            printdbg_tlb("l2 tlb access res fail!\n");
             break;
 
         default: //hit,hit reserved, miss.
+            printdbg_tlb("l2 tlb access res success!\n");
             m_recv_buffer.pop();
             break;
         }
