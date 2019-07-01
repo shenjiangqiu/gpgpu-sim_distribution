@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "*.cu": "cpp",
+        "array": "cpp",
+        "tuple": "cpp",
+        "utility": "cpp",
+        "mutex": "cpp",
+        "thread": "cpp",
+        "fstream": "cpp",
+        "sstream": "cpp",
+        "*.def": "cpp",
+        "stdexcept": "cpp",
+        "iostream": "cpp",
+        "ostream": "cpp"
+    }
+}

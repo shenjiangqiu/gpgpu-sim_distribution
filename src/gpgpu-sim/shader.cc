@@ -25,7 +25,7 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+#include "tlb_icnt.h"
 #include <float.h>
 #include "shader.h"
 #include "gpu-sim.h"
@@ -77,9 +77,9 @@ shader_core_ctx::shader_core_ctx( class gpgpu_sim *gpu,
                                   const struct memory_config *mem_config,
                                   shader_core_stats *stats )
    : core_t( gpu, NULL, config->warp_size, config->n_thread_per_shader ),
+     m_l1I_tlb(new l1_tlb(config->m_L1ITLB_config,global_page_manager)),
      m_barriers( this, config->max_warps_per_shader, config->max_cta_per_core, config->max_barriers_per_cta, config->warp_size ),
-     m_dynamic_warp_id(0), m_active_warps(0),
-     m_l1I_tlb(new l1_tlb(config->m_L1ITLB_config,global_page_manager))
+     m_active_warps(0),m_dynamic_warp_id(0)
 {
     global_n_cores=config->n_simt_clusters;
     m_cluster = cluster;
@@ -98,15 +98,15 @@ shader_core_ctx::shader_core_ctx( class gpgpu_sim *gpu,
     }
     if(m_config->sub_core_model) {
     	//in subcore model, each scheduler should has its own issue register, so num scheduler = reg width
-    	assert(m_config->gpgpu_num_sched_per_core == m_pipeline_reg[ID_OC_SP].get_size() );
-    	assert(m_config->gpgpu_num_sched_per_core == m_pipeline_reg[ID_OC_SFU].get_size() );
-    	assert(m_config->gpgpu_num_sched_per_core == m_pipeline_reg[ID_OC_MEM].get_size() );
+    	assert(((size_t)(m_config->gpgpu_num_sched_per_core)) == m_pipeline_reg[ID_OC_SP].get_size() );
+    	assert((size_t)(m_config->gpgpu_num_sched_per_core) == m_pipeline_reg[ID_OC_SFU].get_size() );
+    	assert((size_t)(m_config->gpgpu_num_sched_per_core) == m_pipeline_reg[ID_OC_MEM].get_size() );
     	if(m_config->gpgpu_tensor_core_avail)
-    		 assert(m_config->gpgpu_num_sched_per_core == m_pipeline_reg[ID_OC_TENSOR_CORE].get_size() );
+    		 assert((size_t)(m_config->gpgpu_num_sched_per_core) == m_pipeline_reg[ID_OC_TENSOR_CORE].get_size() );
     	if(m_config->gpgpu_num_dp_units > 0)
-    		assert(m_config->gpgpu_num_sched_per_core == m_pipeline_reg[ID_OC_DP].get_size() );
+    		assert((size_t)(m_config->gpgpu_num_sched_per_core) == m_pipeline_reg[ID_OC_DP].get_size() );
     	if(m_config->gpgpu_num_int_units > 0)
-    	    assert(m_config->gpgpu_num_sched_per_core == m_pipeline_reg[ID_OC_INT].get_size() );
+    	    assert((size_t)(m_config->gpgpu_num_sched_per_core) == m_pipeline_reg[ID_OC_INT].get_size() );
     }
     
     m_threadState = (thread_ctx_t*) calloc(sizeof(thread_ctx_t), config->n_thread_per_shader);
@@ -467,7 +467,7 @@ void shader_core_ctx::init_warps( unsigned cta_id, unsigned start_thread, unsign
             }
             m_simt_stack[i]->launch(start_pc,active_threads);
 
-              if(m_gpu->resume_option==1 && kernel_id==m_gpu->resume_kernel && ctaid>=m_gpu->resume_CTA && ctaid<m_gpu->checkpoint_CTA_t )
+              if(m_gpu->resume_option==1 && kernel_id==(unsigned)(m_gpu->resume_kernel) && ctaid>=(unsigned)(m_gpu->resume_CTA) && ctaid<(unsigned)(m_gpu->checkpoint_CTA_t) )
                { 
                 char fname[2048];
                 snprintf(fname,2048,"checkpoint_files/warp_%d_%d_simt.txt",i%warp_per_cta,ctaid );
@@ -611,11 +611,11 @@ void shader_core_stats::print( FILE* fout ) const
       fprintf(fout, "\tW%d:%d", i-2, shader_cycle_distro[i]);
    fprintf(fout, "\n");
    fprintf(fout, "single_issue_nums: ");
-   for (unsigned i = 0; i < m_config->gpgpu_num_sched_per_core; i++)
+   for (int i = 0; i < m_config->gpgpu_num_sched_per_core; i++)
         fprintf(fout, "WS%d:%d\t", i, single_issue_nums[i]);
    fprintf(fout, "\n");
    fprintf(fout, "dual_issue_nums: ");
-   for (unsigned i = 0; i < m_config->gpgpu_num_sched_per_core; i++)
+   for (int i = 0; i < m_config->gpgpu_num_sched_per_core; i++)
           fprintf(fout, "WS%d:%d\t", i, dual_issue_nums[i]);
    fprintf(fout, "\n");
 
@@ -898,7 +898,7 @@ void shader_core_ctx::fetch()//redesign for tlb/translate
                     printdbg_PW("core:%lu,cycle:%llu,%llx,%lx\n", get_sid(), gpu_sim_cycle + gpu_tot_sim_cycle, inside->get_virtual_addr(), inside->magic_number);
                 } */
                 fflush(stdout);
-                printdbg_PW("push mf:%llx\n",mf);
+                printdbg_PW("push mf:%p\n",mf);
                 // assert(mf->magic_number == 0x12341234);
 
                 assert(instruction_tlb_response_queue.size()<100);
@@ -972,7 +972,7 @@ void shader_core_ctx::func_exec_inst( warp_inst_t &inst )
 
 void shader_core_ctx::issue_warp( register_set& pipe_reg_set, const warp_inst_t* next_inst, const active_mask_t &active_mask, unsigned warp_id, unsigned sch_id )
 {
-	warp_inst_t** pipe_reg = pipe_reg = pipe_reg_set.get_free(m_config->sub_core_model, sch_id);
+	warp_inst_t** pipe_reg = pipe_reg_set.get_free(m_config->sub_core_model, sch_id);
     assert(pipe_reg);
 
     m_warp[warp_id].ibuffer_free();
@@ -1774,7 +1774,7 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue( cache_t *cache, war
 
 void ldst_unit::process_memory_access_queue_l1cache( l1_cache* cache, mem_fetch *mf )
 {
-    mem_stage_stall_type result = NO_RC_FAIL;
+    //mem_stage_stall_type result = NO_RC_FAIL;
     auto inst=mf->get_inst();
     //if( inst.accessq_empty() )
     //    return result;
@@ -1799,7 +1799,7 @@ void ldst_unit::process_memory_access_queue_l1cache( l1_cache* cache, mem_fetch 
     	}
     	else
         {
-        	result = BK_CONF;
+        	//result = BK_CONF;
         	//delete mf;
         }
         //if( !inst.accessq_empty() &&  result !=BK_CONF)
@@ -2239,7 +2239,7 @@ ldst_unit::ldst_unit( mem_fetch_interface *icnt,
 
         if(m_config->m_L1D_config.l1_latency > 0)
 	    {
-        	for(int i=0; i<m_config->m_L1D_config.l1_latency; i++ )
+        	for(unsigned i=0; i<m_config->m_L1D_config.l1_latency; i++ )
         		l1_latency_queue.push_back((mem_fetch*)NULL);
 	    }
     }
@@ -2435,12 +2435,12 @@ bool ldst_unit::tlb_cycle( warp_inst_t &inst, mem_stage_stall_type &stall_reason
        return true;
    if( inst.active_count() == 0 ) 
        return true;
-   assert( !inst.accessq_empty() );
-   mem_stage_stall_type stall_cond = NO_RC_FAIL;
-   const mem_access_t &access = inst.accessq_back();
+   assert(!inst.accessq_empty());
+   //mem_stage_stall_type stall_cond = NO_RC_FAIL;
+   //const mem_access_t &access = inst.accessq_back();
 
    mem_fetch *mf = m_mf_allocator->alloc(inst, inst.accessq_back());
-   auto physicaddr=mf->physic_addr;
+   //auto physicaddr=mf->physic_addr;
 
    auto result = m_l1_tlb->access(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
    switch (result)
@@ -4200,8 +4200,48 @@ void simt_core_cluster::icnt_cycle()
             }
         }
     }
-    if( m_response_fifo.size() < m_config->n_simt_ejection_buffer_size ) {
-        mem_fetch *mf = (mem_fetch*) ::icnt_pop(m_cluster_id);
+    static bool next_choose_icnt=true;
+    mem_fetch *mf = NULL;
+    if (m_response_fifo.size() < m_config->n_simt_ejection_buffer_size)
+    {
+
+        if (next_choose_icnt) //try data request first;
+        {
+            mf = (mem_fetch *)icnt_pop(m_cluster_id);
+            if (mf)
+            {
+                next_choose_icnt = false;
+            }
+            else
+            {
+                if (global_tlb_icnt->ready(m_cluster_id, gpu_sim_cycle + gpu_tot_sim_cycle))
+                {
+                    next_choose_icnt = true;
+
+                    mf = global_tlb_icnt->recv(m_cluster_id);
+
+                }
+            }
+        }
+        else //try tlb first
+        {
+            if (global_tlb_icnt->ready(m_cluster_id, gpu_sim_cycle + gpu_tot_sim_cycle)) //tlb ready
+            {
+                next_choose_icnt = true;
+
+                mf = global_tlb_icnt->recv(m_cluster_id);
+            }
+            else //try to recv data request
+            {
+                mf = (mem_fetch *)icnt_pop(m_cluster_id);
+                if (mf)
+                {
+                    next_choose_icnt = false;
+                }
+            }
+        }
+
+        //mem_fetch *mf = (mem_fetch*) ::icnt_pop(m_cluster_id);
         if(!mf){
             return;
         }

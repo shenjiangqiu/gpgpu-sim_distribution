@@ -31,7 +31,7 @@
 #include "addrdec.h"
 #include "../abstract_hardware_model.h"
 #include <bitset>
-
+#include"debug_macro.h"
 enum mf_type {
    READ_REQUEST = 0,
    WRITE_REQUEST,
@@ -64,6 +64,7 @@ public:
     #ifdef TLBDEBUG
     static int m_nums;
     #endif
+    unsigned icnt_to;
     mem_fetch( const mem_access_t &access, 
                const warp_inst_t *inst,
                unsigned ctrl_size, 

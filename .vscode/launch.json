@@ -1,0 +1,47 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) cfd core",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ptxtest/cuda/test/cfd/euler3d",
+            "coreDumpPath": "${workspaceFolder}/ptxtest/cuda/test/cfd/core",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": true,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) bfs ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ptxtest/cuda/test/bfs/bfs",
+            "args": ["../../data/bfs/graph1MW_6.txt"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/ptxtest/cuda/test/bfs",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

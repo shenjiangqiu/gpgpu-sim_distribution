@@ -1,4 +1,5 @@
 #include "l2_tlb.hpp"
+#include"tlb_icnt.h"
 #include "page_table_walker.hpp"
 #include <unordered_map>
 //#define TLBDEBUG
@@ -247,13 +248,15 @@ void real_page_table_walker::cycle()
     if (!miss_queue.empty())
     {
         //TODO set destin L2 partition
-        if (::icnt_has_buffer(global_l2_tlb_index, 8u))
-        {
             auto mf = miss_queue.front();
+        // if (::icnt_has_buffer(global_l2_tlb_index, 8u))
+        if(global_tlb_icnt->free(global_l2_tlb_index,mf->get_sub_partition_id()+global_n_cores+1))
+        {
             miss_queue.pop();
             auto subpartition_id = mf->get_sub_partition_id();
 
-            ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores + 1, mf, 8u);
+            // ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores + 1, mf, 8u);
+            global_tlb_icnt->send(global_l2_tlb_index, subpartition_id + global_n_cores + 1,mf,gpu_sim_cycle+gpu_tot_sim_cycle);
             printdbg_PW("push mf to icnt:mf->address:%llx,from %u,to: %u\n", mf->get_physic_addr(), global_l2_tlb_index, subpartition_id + global_n_cores + 1);
         }
         else
