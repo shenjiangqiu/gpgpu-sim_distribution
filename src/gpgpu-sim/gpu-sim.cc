@@ -868,16 +868,33 @@ bool gpgpu_sim::active()
        return false;
     if (m_config.gpu_deadlock_detect && gpu_deadlock) 
        return false;
-    for (unsigned i=0;i<m_shader_config->n_simt_clusters;i++) 
-       if( m_cluster[i]->get_not_completed()>0 ) 
-           return true;;
+    for (unsigned i = 0; i < m_shader_config->n_simt_clusters; i++)
+       if (m_cluster[i]->get_not_completed() > 0)
+       {
+            printdbg_COREQ("CORE warp busy!\n"); 
+          return true;
+       }
     for (unsigned i=0;i<m_memory_config->m_n_mem;i++) 
-       if( m_memory_partition_unit[i]->busy()>0 )
-           return true;;
-    if( icnt_busy() )
-        return true;
-    if( get_more_cta_left() )
-        return true;
+       if( m_memory_partition_unit[i]->busy()>0 ){
+          printdbg_COREQ("mem busy!\n");
+          return true;
+       }
+
+    if (icnt_busy())
+    {
+       printdbg_COREQ("ICNT  busy!\n");
+       return true;
+    }
+    if (global_tlb_icnt->busy())
+    {
+       printdbg_COREQ("TLBICNT  busy!\n");
+       return true;
+    }
+    if (get_more_cta_left())
+    {
+       printdbg_COREQ("More CTA LEFT\n");
+       return true;
+    }
     return false;
 }
 
@@ -1582,12 +1599,18 @@ void gpgpu_sim::cycle()
                   unsigned response_size =8+8;
                   if(global_tlb_icnt->free(m_shader_config->mem2device(i),global_l2_tlb_index)){
                      // ::icnt_push(m_shader_config->mem2device(i),global_l2_tlb_index,mf,response_size);
+                     
                      global_tlb_icnt->send(m_shader_config->mem2device(i),global_l2_tlb_index,mf,gpu_tot_sim_cycle+gpu_sim_cycle);
+                     printdbg_ICNT("ICNT:MEM to L2:from MEM:%u,mf:%llx\n",m_shader_config->mem2device(i),mf->get_virtual_addr());
+
                      printdbg_PW("push pw requst from mem to l2 tlb\n");
                      m_memory_sub_partition[i]->pop();
                      partiton_replys_in_parallel_per_cycle++;
 
                   }else{
+                     
+                     printdbg_ICNT("ICNT:MEM to L2:try to send but not free,from MEM:%u\n",m_shader_config->mem2device(i));
+
                      gpu_stall_icnt2sh++;
                   }
                }else{
@@ -1648,28 +1671,37 @@ void gpgpu_sim::cycle()
                 {
                    if (global_tlb_icnt->ready(m_shader_config->mem2device(i), gpu_sim_cycle + gpu_tot_sim_cycle))
                    {
-                      next_choose_icnt=true;
+                      next_choose_icnt = true;
 
                       auto mf = global_tlb_icnt->recv(m_shader_config->mem2device(i));
+                      printdbg_ICNT("ICNT:MEM RECV:TO MEM:%u,mf:%llx\n", m_shader_config->mem2device(i), mf->get_virtual_addr());
                       m_memory_sub_partition[i]->push(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
                       if (mf)
                          partiton_reqs_in_parallel_per_cycle++;
                    }
+                   else
+                   {
+                      printdbg_ICNT("ICNT:MEM RECV:TO MEM:%u,NOT READY!\n", m_shader_config->mem2device(i));
+                   }
                 }
              }
-             else//try tlb first
+             else //try tlb first
              {
                 if (global_tlb_icnt->ready(m_shader_config->mem2device(i), gpu_sim_cycle + gpu_tot_sim_cycle)) //tlb ready
                 {
                    next_choose_icnt = true;
 
                    auto mf = global_tlb_icnt->recv(m_shader_config->mem2device(i));
+                   printdbg_ICNT("ICNT:MEM RECV:TO MEM:%u,mf:%llx\n", m_shader_config->mem2device(i), mf->get_virtual_addr());
+
                    m_memory_sub_partition[i]->push(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
                    if (mf)
                       partiton_reqs_in_parallel_per_cycle++;
                 }
                 else //try to recv data request
                 {
+                  printdbg_ICNT("ICNT:MEM RECV:TO MEM:%u,NOT READY!\n", m_shader_config->mem2device(i));
+
                    mem_fetch *mf = (mem_fetch *)icnt_pop(m_shader_config->mem2device(i));
                    m_memory_sub_partition[i]->push(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
                    if (mf)
@@ -1786,7 +1818,7 @@ void gpgpu_sim::cycle()
             for (unsigned i=0;i<m_shader_config->n_simt_clusters;i++) {
                 m_cluster[i]->get_current_occupancy(active, total);
             }
-            DPRINTF(LIVENESS, "uArch: inst.: %lld (ipc=%4.1f, occ=%0.4f\% [%llu / %llu]) sim_rate=%u (inst/sec) elapsed = %u:%u:%02u:%02u / %s", 
+            DPRINTF(LIVENESS, "uArch: inst.: %lld (ipc=%4.1f, occ=%0.4f  [%llu / %llu]) sim_rate=%u (inst/sec) elapsed = %u:%u:%02u:%02u / %s", 
                    gpu_tot_sim_insn + gpu_sim_insn, 
                    (double)gpu_sim_insn/(double)gpu_sim_cycle,
                    float(active)/float(total) * 100, active, total,

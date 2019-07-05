@@ -5,6 +5,44 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "(gdb) add ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ptxtest/a.out",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/ptxtest/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) cfd ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ptxtest/cuda/test/cfd/euler3d",
+            "args": ["../../data/cfd/missile.domn.0.2M"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/ptxtest/cuda/test/cfd/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
             "name": "(gdb) cfd core",
             "type": "cppdbg",
             "request": "launch",

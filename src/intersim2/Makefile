@@ -44,7 +44,7 @@ endif
 
 CPPFLAGS += -Wall $(INCPATH) $(DEFINE)
 ifneq ($(DEBUG),1)
-CPPFLAGS += -O3 -DNDEBUG
+CPPFLAGS += -O3  
 else
 CPPFLAGS += -g
 endif

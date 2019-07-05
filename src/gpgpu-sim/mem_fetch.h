@@ -64,6 +64,7 @@ public:
     #ifdef TLBDEBUG
     static int m_nums;
     #endif
+    unsigned icnt_from;
     unsigned icnt_to;
     mem_fetch( const mem_access_t &access, 
                const warp_inst_t *inst,

@@ -1508,7 +1508,7 @@ static unsigned get_tex_datasize( const ptx_instruction *pI, ptx_thread_info *th
    const operand_info &src1 = pI->src1(); //the name of the texture
    std::string texname = src1.name();
 
-   gpgpu_t *gpu = thread->get_gpu();
+   //gpgpu_t *gpu = thread->get_gpu();
    /*
      For programs with many streams, textures can be bound and unbound
      asynchronously.  This means we need to use the kernel's "snapshot" of
@@ -1593,7 +1593,7 @@ void ptx_thread_info::ptx_exec_inst( warp_inst_t &inst, unsigned lane_id)
       }
       
       //Tensorcore is warp synchronous operation. So these instructions needs to be executed only once. To make the simulation faster removing the redundant tensorcore operation
-      if(!tensorcore_op(inst_opcode)||(tensorcore_op(inst_opcode))&&(lane_id==0)){
+      if(!tensorcore_op(inst_opcode)||((tensorcore_op(inst_opcode))&&(lane_id==0))){
 	      switch ( inst_opcode ) {
 	#define OP_DEF(OP,FUNC,STR,DST,CLASSIFICATION) case OP: FUNC(pI,this); op_classification = CLASSIFICATION; break;
 	#define OP_W_DEF(OP,FUNC,STR,DST,CLASSIFICATION) case OP: FUNC(pI,get_core(),inst); op_classification = CLASSIFICATION; break;
@@ -2168,16 +2168,12 @@ void gpgpu_cuda_ptx_sim_main_func( kernel_info_t &kernel, bool openCL )
     unsigned max_cta_tot = max_cta(kernel_info,kernel.threads_per_cta(), g_the_gpu->getShaderCoreConfig()->warp_size, g_the_gpu->getShaderCoreConfig()->n_thread_per_shader, g_the_gpu->getShaderCoreConfig()->gpgpu_shmem_size, g_the_gpu->getShaderCoreConfig()->gpgpu_shader_registers, g_the_gpu->getShaderCoreConfig()->max_cta_per_core);
     printf("Max CTA : %d\n",max_cta_tot);
 
-    
-
-
-      
-    int inst_count=50;
-    int cp_op= g_the_gpu->checkpoint_option;
-    int cp_CTA = g_the_gpu->checkpoint_CTA;
-    int cp_kernel= g_the_gpu->checkpoint_kernel;
-    cp_count= g_the_gpu->checkpoint_insn_Y;
-    cp_cta_resume= g_the_gpu->checkpoint_CTA_t;
+    //int inst_count=50;
+    int cp_op = g_the_gpu->checkpoint_option;
+    //int cp_CTA = g_the_gpu->checkpoint_CTA;
+    int cp_kernel = g_the_gpu->checkpoint_kernel;
+    cp_count = g_the_gpu->checkpoint_insn_Y;
+    cp_cta_resume = g_the_gpu->checkpoint_CTA_t;
     int cta_launched =0;
 
     //we excute the kernel one CTA (Block) at the time, as synchronization functions work block wise
@@ -2339,10 +2335,10 @@ void functionalCoreSim::execute(int inst_count, unsigned ctaid_cp)
     checkpoint *g_checkpoint;
     g_checkpoint = new checkpoint();
     
-    symbol * sym;
+      //  symbol * sym;
     ptx_reg_t regval;
     regval.u64= 123;
-    symbol_table * symtab= m_kernel->entry()->get_symtab();
+      // symbol_table * symtab= m_kernel->entry()->get_symtab();
 
 
     unsigned ctaid =m_kernel->get_next_cta_id_single();

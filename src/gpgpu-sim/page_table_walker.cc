@@ -3,8 +3,7 @@
 #include "page_table_walker.hpp"
 #include <unordered_map>
 //#define TLBDEBUG
-#define PWDEBUG
-#define TLBDEBUG
+
 #include "debug_macro.h"
 #include "icnt_wrapper.h"
 unsigned total_mf = 0;
@@ -155,8 +154,8 @@ void real_page_table_walker::cycle()
     if (working_walker.size() < m_config.walker_size and !waiting_queue.empty()) //it's from waiting queue, to working set.
     {
         auto mf = waiting_queue.front();
-        auto vir_addr=mf->get_virtual_addr();
-        printdbg_PW("new mf to enter walker: mf addr:%llx.",vir_addr);
+        
+        printdbg_PW("new mf to enter walker: mf addr:%llx.",mf->get_virtual_addr());
         waiting_queue.pop();
         auto new_mf =mf->get_copy();
         total_mf++;
@@ -218,7 +217,7 @@ void real_page_table_walker::cycle()
                 std::get<2>(target_status)=false;
                 ready_to_send.pop();
                 ready_to_send.push(mf);
-                assert(ready_to_send.size() < m_config.walker_size);
+                assert(ready_to_send.size() <= m_config.walker_size);
                 break;
             }
             case tlb_result::hit_reserved:
@@ -238,6 +237,7 @@ void real_page_table_walker::cycle()
             }
             case tlb_result::resfail:
                 //do nothing
+                printdbg_ICNT("pagetable walker cache res fail,ready to send size:%lu\n",ready_to_send.size());
                 break;
             default:
 
@@ -257,10 +257,16 @@ void real_page_table_walker::cycle()
 
             // ::icnt_push(global_l2_tlb_index, subpartition_id + global_n_cores + 1, mf, 8u);
             global_tlb_icnt->send(global_l2_tlb_index, subpartition_id + global_n_cores + 1,mf,gpu_sim_cycle+gpu_tot_sim_cycle);
+            printdbg_ICNT("ICNT:L2 to Mem:To Mem:%u,mf:%llx\n",subpartition_id + global_n_cores + 1,mf->get_virtual_addr());
+            
             printdbg_PW("push mf to icnt:mf->address:%llx,from %u,to: %u\n", mf->get_physic_addr(), global_l2_tlb_index, subpartition_id + global_n_cores + 1);
         }
         else
         {
+            auto subpartition_id = mf->get_sub_partition_id();
+
+            printdbg_ICNT("ICNT:L2 to Mem:try to send but not free,To Mem:%u\n", (unsigned)(subpartition_id + global_n_cores + 1));
+
             printdbg_PW("INCT not has buffer!\n");
         }
     }
@@ -273,8 +279,7 @@ void real_page_table_walker::cycle()
         if (child_mf)
         {
             auto mf_origin = child_mf->pw_origin;
-            auto vir_addr=mf_origin->get_virtual_addr();
-            printdbg_PW("from icnt to pagewalker! origin mf:%llx,level:%u\n",vir_addr,std::get<0>(working_walker[mf_origin]));
+            printdbg_PW("from icnt to pagewalker! origin mf:%llx,level:%u\n",mf_origin->get_virtual_addr(),std::get<0>(working_walker[mf_origin]));
             auto &level = std::get<0>(working_walker[mf_origin]);
             if (level == page_table_level::L1_LEAF)
             {

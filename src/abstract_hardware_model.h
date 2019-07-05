@@ -565,9 +565,9 @@ public:
     int checkpoint_kernel;
     int checkpoint_CTA;
     int resume_option;
-    int resume_kernel;
-    int resume_CTA;
-    int checkpoint_CTA_t;
+    unsigned resume_kernel;
+    unsigned resume_CTA;
+    unsigned checkpoint_CTA_t;
     int checkpoint_insn_Y;
     void* gpu_malloc( size_t size );
     void* gpu_mallocarray( size_t count );
@@ -1184,7 +1184,7 @@ public:
     }
 
     void load_global_mem(class memory_space *temp_mem, char * f1name);
-    void store_global_mem(class memory_space *mem, char * fname , char * format);
+    void store_global_mem(class memory_space *mem, const char * fname ,const char * format);
     unsigned radnom;
 
 

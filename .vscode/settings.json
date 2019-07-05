@@ -11,6 +11,7 @@
         "*.def": "cpp",
         "stdexcept": "cpp",
         "iostream": "cpp",
-        "ostream": "cpp"
+        "ostream": "cpp",
+        "bitset": "cpp"
     }
 }
