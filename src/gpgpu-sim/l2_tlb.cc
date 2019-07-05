@@ -214,18 +214,22 @@ void l2_tlb::cycle()
     { //from response queue to icnt
         auto mf = m_response_queue.front();
         printdbg_tlb("send mf:%llX, to icnt\n", mf->get_virtual_addr());
-        auto size = 8 + 8; //ctrl size plus one tlb targe address
+        //auto size = 8 + 8; //ctrl size plus one tlb targe address
         // if (::icnt_has_buffer(m_config.m_icnt_index, size))
         if(global_tlb_icnt->free(m_config.m_icnt_index,mf->get_tpc()))
         {
             // ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
             global_tlb_icnt->send(m_config.m_icnt_index,mf->get_tpc(),mf,gpu_sim_cycle+gpu_tot_sim_cycle);
+            printdbg_ICNT("ICNT:L2 to core:To Core:%u,mf:%llx\n",mf->get_tpc(),mf->get_virtual_addr());
+            
             m_response_queue.pop_front();
             printdbg_tlb("successfully send to icnt\n");
         }
         else
         {
-            printdbg_tlb("fail to send mf:%llX\n", mf->get_virtual_addr());
+            printdbg_ICNT("ICNT:L2 to core:try to send but not free,To Core:%u\n", mf->get_tpc());
+
+            //printdbg_tlb("fail to send mf:%llX\n", mf->get_virtual_addr());
         }
     }
     while (m_mshrs->access_ready()) //from mshr to response queue
@@ -245,7 +249,7 @@ void l2_tlb::cycle()
     if (!m_miss_queue.empty()) //from l2tlb to page walker/different from l1 tlb
     {                          //send the request to
         auto mf = m_miss_queue.front();
-        auto vir_addr = mf->get_virtual_addr();
+        //auto vir_addr = mf->get_virtual_addr();
         printdbg_tlb("sending mf:%llX to page walker\n", mf->get_virtual_addr());
         if (m_page_table_walker->free())
         {
@@ -265,17 +269,26 @@ void l2_tlb::cycle()
         // mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
         if(global_tlb_icnt->ready(m_config.m_icnt_index,gpu_sim_cycle+gpu_tot_sim_cycle)){
             mf=global_tlb_icnt->recv(m_config.m_icnt_index);
+            printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,mf:%llx\n", m_config.m_icnt_index, mf->get_virtual_addr());
+
             if (mf->pw_origin != NULL)
             { //it's a pw resquest
                 m_page_table_walker->send_to_recv_buffer(mf);
+                assert(mf->icnt_from>=16);
+                printdbg_ICNT("this is a page walker request from memory\n");
                 printdbg_PW("from icnt send to page walker!\n");
             }
             else
             {
+                assert(mf->icnt_from<=14);
+                printdbg_ICNT("this is from Core\n");
                 printdbg_tlb("get mf from icnt!access mf:%llX,from cluster%u\n", mf->get_virtual_addr(), mf->get_tpc());
                 m_recv_buffer.push(mf);
                 printdbg_PW("m recv buffer size:%lu\n", m_recv_buffer.size());
             }
+        }else{
+                printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,NOT READY!\n",  m_config.m_icnt_index);
+
         }
     }
     else

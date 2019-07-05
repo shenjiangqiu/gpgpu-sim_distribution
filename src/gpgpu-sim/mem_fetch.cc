@@ -54,7 +54,7 @@ mem_fetch::mem_fetch( const mem_access_t &access,
                       const struct memory_config *config,
 					  mem_fetch *m_original_mf,
 					  mem_fetch *m_original_wr_mf,
-                      mem_fetch* pw_origin):/* is_in_response_queue(false),magic_number(0x12341234),*/finished_tlb(false),pw_origin(pw_origin)
+                      mem_fetch* pw_origin):/* is_in_response_queue(false),magic_number(0x12341234),*/pw_origin(pw_origin),finished_tlb(false)
 
 {
     #ifdef TLBDEBUG
@@ -81,7 +81,7 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    m_wid = wid;
 
    virtual_addr=access.get_addr();
-   if (sid == -1)
+   if (sid ==(unsigned) -1)
        physic_addr = virtual_addr; //that is a wb request, no need to do the translation
    else
        physic_addr = global_page_manager->translate(virtual_addr);

@@ -3149,7 +3149,7 @@ void mma_st_impl( const ptx_instruction *pI, core_t *core, warp_inst_t &inst )
 			mem_txn_addr[num_mem_txn++]=push_addr;
 	
 			if(debug_tensorcore){
-				printf("wmma:store:thread%d=%x,%x,%x,%x,%x,%x,%x,%x\n",thrd,v[0].s64,v[1].s64,v[2].s64,v[3].s64,v[4].s64,v[5].s64,v[6].s64,v[7].s64);   
+				printf("wmma:store:thread%d=%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld\n",thrd,v[0].s64,v[1].s64,v[2].s64,v[3].s64,v[4].s64,v[5].s64,v[6].s64,v[7].s64);   
 				float temp;
 				int l;
 				printf("thread=%d:",thrd);
@@ -3176,7 +3176,7 @@ void mma_st_impl( const ptx_instruction *pI, core_t *core, warp_inst_t &inst )
 			}
 	
 			if(debug_tensorcore)
-				printf("wmma:store:thread%d=%x,%x,%x,%x,%x,%x,%x,%x\n",thrd,nw_v[0].s64,nw_v[1].s64,nw_v[2].s64,nw_v[3].s64,nw_v[4].s64,nw_v[5].s64,nw_v[6].s64,nw_v[7].s64);   
+				printf("wmma:store:thread%d=%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld\n",thrd,nw_v[0].s64,nw_v[1].s64,nw_v[2].s64,nw_v[3].s64,nw_v[4].s64,nw_v[5].s64,nw_v[6].s64,nw_v[7].s64);   
 		}
 	}
    	

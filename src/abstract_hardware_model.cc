@@ -88,7 +88,7 @@ void checkpoint::load_global_mem(class memory_space *temp_mem, char * f1name)
       fclose ( fp2 );
 }
 
-void checkpoint::store_global_mem(class memory_space * mem, char *fname, char * format)
+void checkpoint::store_global_mem(class memory_space * mem, const char *fname,const char * format)
 {
 
       FILE * fp3 = fopen(fname, "w");

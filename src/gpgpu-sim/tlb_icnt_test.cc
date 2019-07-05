@@ -66,4 +66,5 @@ int test_main()
         cout << "finished test " << i << "\n\n\n\n"
              << endl;
     }
+    return 0;
 }

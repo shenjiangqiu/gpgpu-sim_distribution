@@ -15,7 +15,7 @@ public:
     tlb_icnt(unsigned num_queues, unsigned queue_size, unsigned latency);
     bool free(unsigned from, unsigned to);
     void send(unsigned from, unsigned to, mem_fetch *mf, unsigned long long time);
-
+    bool busy();
     bool ready(unsigned to, unsigned long long time);
     mem_fetch *recv(unsigned to);
 
@@ -23,6 +23,7 @@ private:
     queue_set send_queue;
     unsigned queue_size;
     unsigned latency;
+    unsigned total_inside;
 };
 
 extern tlb_icnt *global_tlb_icnt;

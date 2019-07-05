@@ -101,13 +101,32 @@ public:
         : m_shader(shader), m_warp_size(warp_size)
     {
         m_stores_outstanding=0;
+        tlb_outstanding=0;
         m_inst_in_pipeline=0;
         reset(); 
     }
+    bool tlb_done() const
+    {
+        if (tlb_outstanding == 0)
+            return true;
+        else
+        {
+            return false;
+        }
+    }
+    void inc_tlb_out()
+    {
+        tlb_outstanding++;
+    }
+    void dec_tlb_out()
+    {
+        tlb_outstanding--;
+    }
     void reset()
     {
-        //assert( m_stores_outstanding==0);//TODO why that can't be zero
+        assert( m_stores_outstanding==0);//TODO why that can't be zero
         assert( m_inst_in_pipeline==0);
+        assert(tlb_outstanding==0);
         m_imiss_pending=false;
         m_warp_id=(unsigned)-1;
         m_dynamic_warp_id = (unsigned)-1;
@@ -213,7 +232,9 @@ public:
     void set_imiss_pending() { m_imiss_pending=true; }
     void clear_imiss_pending() { m_imiss_pending=false; }
 
-    bool stores_done() const { return m_stores_outstanding == 0; }
+    bool stores_done() const { 
+        assert(m_stores_outstanding>=0);
+        return m_stores_outstanding == 0; }
     void inc_store_req() { m_stores_outstanding++; }
     void dec_store_req() 
     {
@@ -246,6 +267,7 @@ public:
     unsigned get_warp_id() const { return m_warp_id; }
 
 private:
+    unsigned tlb_outstanding;
     static const unsigned IBUFFER_SIZE=2;
     class shader_core_ctx *m_shader;
     unsigned m_cta_id;
@@ -1830,6 +1852,8 @@ public:
     void mem_instruction_stats(const warp_inst_t &inst);
     void decrement_atomic_count( unsigned wid, unsigned n );
     void inc_store_req( unsigned warp_id) { m_warp[warp_id].inc_store_req(); }
+    void inc_tlb_out(unsigned warp_id){m_warp[warp_id].inc_tlb_out();}
+    void dec_tlb_out(unsigned warp_id){m_warp[warp_id].dec_tlb_out();}
     void dec_inst_in_pipeline( unsigned warp_id ) { m_warp[warp_id].dec_inst_in_pipeline(); } // also used in writeback()
     void store_ack( class mem_fetch *mf );
     bool warp_waiting_at_mem_barrier( unsigned warp_id );
