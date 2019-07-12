@@ -2155,6 +2155,7 @@ void ldst_unit::invalidate()
 {
     // Flush L1D cache
     m_L1D->invalidate();
+    m_l1_tlb->invalidate();
 }
 
 simd_function_unit::simd_function_unit(const shader_core_config *config)
@@ -2835,18 +2836,19 @@ void ldst_unit::cycle()
     /*
         var done here should be treated seriously!
      */
-
     done &= shared_cycle(pipe_reg, rc_fail, type);
     done &= constant_cycle(pipe_reg, rc_fail, type);
     done &= texture_cycle(pipe_reg, rc_fail, type);
     done &= tlb_cycle(pipe_reg, rc_fail, type); //read from pipline , send to tlb.
-    memory_cycle(rc_fail, type);                //read from tlb response queue, do regular preocess / fix bug, in this new design, we don't need to consider the done of memory_cycle()!
+    decltype(rc_fail) new_fail;
+    decltype(type) new_type;
+    memory_cycle(new_fail, new_type);                //read from tlb response queue, do regular preocess / fix bug, in this new design, we don't need to consider the done of memory_cycle()!
     m_mem_rc = rc_fail;
 
     if (!done)
     { // log stall types and return
         assert(rc_fail != NO_RC_FAIL);
-        assert(!pipe_reg.accessq_empty());
+        // assert(!pipe_reg.accessq_empty());//shared inst is alway empty!but that my not done!!!!(bank conflict)
         m_stats->gpgpu_n_stall_shd_mem++;
         m_stats->gpu_stall_shd_mem_breakdown[type][rc_fail]++;
         return;
@@ -3582,6 +3584,8 @@ void shader_core_ctx::cache_flush()
 void shader_core_ctx::cache_invalidate()
 {
     m_ldst_unit->invalidate();
+    m_l1I_tlb->invalidate();
+    
 }
 
 // modifiers

@@ -513,10 +513,10 @@ void gpgpu_sim_config::reg_options(option_parser_t opp)
                  "0");
    option_parser_register(opp, "-gpgpu_flush_l1_cache", OPT_BOOL, &gpgpu_flush_l1_cache,
                 "Flush L1 cache at the end of each kernel call",
-                "0");
+                "1");
    option_parser_register(opp, "-gpgpu_flush_l2_cache", OPT_BOOL, &gpgpu_flush_l2_cache,
                    "Flush L2 cache at the end of each kernel call",
-                   "0");
+                   "1");
    option_parser_register(opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect, 
                 "Stop the simulation at deadlock (1=on (default), 0=off)", 
                 "1");
@@ -1792,6 +1792,7 @@ void gpgpu_sim::cycle()
 
          if (all_threads_complete && !m_memory_config->m_L2_config.disabled() ) {
             printf("Flushed L2 caches...\n");
+            m_l2_tlb.invalidate();
             if (m_memory_config->m_L2_config.get_num_lines()) {
                int dlc = 0;
                for (unsigned i=0;i<m_memory_config->m_n_mem;i++) {

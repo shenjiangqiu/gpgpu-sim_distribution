@@ -45,6 +45,12 @@ class l2_tlb{
     using us_mf_it=std::unordered_set<mem_fetch*>::iterator;
     
     public:
+    void invalidate(){
+        for(unsigned i=0;i<m_config.n_sets*m_config.n_associate;i++){
+            m_tag_arrays[i]->set_status(INVALID,mem_access_sector_mask_t());
+
+        }
+    }
     l2_tlb(l2_tlb_config m_config);
     void init();
     tlb_result access(mem_fetch* mf,unsigned time);

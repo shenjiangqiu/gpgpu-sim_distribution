@@ -363,15 +363,28 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
         decltype(start) hit_line;
         decltype(start) last_line;
         auto mask = child_mf->get_access_sector_mask();
+        bool all_reserved=true;
+
         for (; start < end; start++)
         {
-            if (!(*start)->is_invalid_line())
+            if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
             {
-                if ((*start)->get_last_access_time() < oldest_access_time)
+                auto status = (*start)->get_status(mask);
+                if (status != RESERVED)//for eviction
                 {
-                    oldest_access_time = (*start)->get_last_access_time();
-                    last_line = start;
+                    assert(status == VALID);
+                    all_reserved = false;
+                    if ((*start)->get_last_access_time() < oldest_access_time)
+                    {
+                        oldest_access_time = (*start)->get_last_access_time();
+                        last_line = start;
+                    }
+                }else{
+                    assert(time - (*start)->get_alloc_time() < 50000);
+
                 }
+            
+                
                 if ((*start)->m_tag == tag) //ok we find
                 {
 
@@ -421,12 +434,17 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
             }
             else
             { //any time find the valid line, get it!
+                all_reserved=false;
                 if (has_free_line == false)
                 {
                     has_free_line = true;
                     free_line = start;
                 }
             }
+        }
+        if (all_reserved)
+        {
+            return tlb_result::resfail;
         }
         // when run to here, means no hit line found,It's a miss;
         if (m_mshr->full(block_addr))
