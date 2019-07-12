@@ -35,6 +35,12 @@ class l1_tlb{
     using us_mf_it=std::unordered_set<mem_fetch*>::iterator;
     
     public:
+    void invalidate(){
+        for(unsigned i=0;i<m_config.n_sets*m_config.n_associate;i++){
+            m_tag_arrays[i]->set_status(INVALID,mem_access_sector_mask_t());
+
+        }
+    }
     l1_tlb(l1_tlb_config &m_config,page_manager* );
     l1_tlb()=delete;
     l1_tlb(l1_tlb& other)=delete;
