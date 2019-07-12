@@ -17,7 +17,7 @@ public:
     virtual mem_fetch *recv() = 0;             //recv and pop;
     virtual mem_fetch *recv_probe() const = 0; //recv not
     virtual void send_to_recv_buffer(mem_fetch* mf)=0;
-
+    virtual void print_stat() const=0;
 };
 class latency_queue
 {
@@ -46,6 +46,7 @@ public:
     //virtual bool recv_ready() override;
     virtual mem_fetch *recv() override;             //recv and pop override;
     virtual mem_fetch *recv_probe() const override; //recv not
+    virtual void print_stat() const override{}
 
 private:
     latency_queue m_latency_queue;
@@ -80,6 +81,13 @@ public:
     virtual void send_to_recv_buffer(mem_fetch* mf){
         icnt_response_buffer.push(mf);
     }
+    virtual void print_stat() const override{
+        printf("pw cache access: %llu\n",access_times);
+        printf("pw cache hit: %llu\n",hit_times);
+        printf("pw cache miss: %llu\n",miss_times);
+        printf("pw cache resfail: %llu\n",resfail_times);
+    }
+
 private:
     void fill(mem_fetch* mf);//fill pw cache;
     page_table_walker_config m_config;
@@ -93,6 +101,12 @@ private:
     std::queue<mem_fetch *> miss_queue;           //send to icnt
     std::queue<mem_fetch *> ready_to_send;        //it's virtual,dosn't exist in real hardware
     std::queue<mem_fetch *> icnt_response_buffer; //recv from icnt
+
+    using ull=unsigned long long;
+    ull access_times;
+    ull hit_times;
+    ull miss_times;
+    ull resfail_times;
 };
 
 #endif

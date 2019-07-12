@@ -40,7 +40,7 @@ class l2_tlb_config{
 };
 
 class l2_tlb{
-
+    using ull=unsigned long long;
     //TODO add abstract_page_walker, inti page_walker.
     using us_mf_it=std::unordered_set<mem_fetch*>::iterator;
     
@@ -77,6 +77,10 @@ class l2_tlb{
     std::unordered_set<mem_fetch*> outgoing_mf;//we do not use multiple set
     std::queue<mem_fetch*> m_recv_buffer;
 
+    ull access_times;
+    ull hit_times;
+    ull miss_times;
+    ull resfail_times;
 };
 
 #endif

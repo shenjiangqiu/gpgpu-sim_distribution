@@ -16,11 +16,17 @@ using std::endl;
 unsigned global_l2_tlb_index;
 unsigned global_n_cores;
 unsigned global_walkers;
+
+
 l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
                                        m_page_table_walker(new real_page_table_walker(config.m_page_table_walker_config)),
                                        m_page_manager(global_page_manager),
                                        m_mshrs(new mshr_table(m_config.n_mshr_entries, m_config.n_mshr_max_merge)),
-                                       m_tag_arrays(m_config.n_sets * m_config.n_associate) //null shared point
+                                       m_tag_arrays(m_config.n_sets * m_config.n_associate), //null shared point
+                                       access_times(0),
+                                       hit_times(0),
+                                       miss_times(0),
+                                       resfail_times(0)
 {
     for (unsigned i = 0; i < m_config.n_sets * m_config.n_associate; i++)
     {
@@ -45,11 +51,11 @@ void l2_tlb_config::init()
 void l2_tlb_config::reg_option(option_parser_t opp)
 {
     m_page_table_walker_config.reg_option(opp);
-    option_parser_register(opp, "-l2tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l2 tlb", "64");
-    option_parser_register(opp, "-l2tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
-    option_parser_register(opp, "-l2tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the mshr size", "16");
+    option_parser_register(opp, "-l2tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l2 tlb", "32");
+    option_parser_register(opp, "-l2tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "16");
+    option_parser_register(opp, "-l2tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the mshr size", "32");
     option_parser_register(opp, "-l2tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max merge size", "32");
-    option_parser_register(opp, "-l2tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the response queue size 0=unlimited", "0");
+    option_parser_register(opp, "-l2tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the response queue size 0=unlimited", "40");
     option_parser_register(opp, "-l2tlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the miss queue size 0=unlimited", "0");
     option_parser_register(opp, "-l2tlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the page size", "4096");
     option_parser_register(opp, "-l2tlb_pw_size", option_dtype::OPT_UINT32, &m_pw_size, "the size of pw size", "16");
@@ -88,8 +94,9 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
     else
     {
         /* code */
+        
         printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
-
+        access_times++;
         auto v_addr = mf->get_virtual_addr();
         auto m_page_size_log2 = m_config.m_page_size_log2;
         auto n_set = m_config.n_sets;
@@ -140,6 +147,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                         if (m_mshrs->full(block_addr))
                         {
                             printdbg_tlb("reserved! and mshr full\n");
+                            resfail_times++;
                             return tlb_result::resfail;
                         }
                         else
@@ -147,6 +155,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                             printdbg_tlb("hit reserved! add to mfshr\n");
                             m_mshrs->add<2>(block_addr, mf); //not new
                             (*start)->set_last_access_time(time, mask);
+                            miss_times++;
                             return tlb_result::hit_reserved;
                         }
                         break;
@@ -154,8 +163,14 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
 
                         all_reserved = false;
                         printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
+                        if(m_config.response_queue_size!=0 and m_config.response_queue_size<=m_response_queue.size()){
+                            resfail_times++;
+                            return tlb_result::resfail;
+                        }
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
-                        assert(m_response_queue.size() < 100);
+                        
+                        //assert(m_response_queue.size() < 100);
+                        hit_times++;
                         return tlb_result::hit;
 
                         break;
@@ -182,10 +197,12 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
         // when run to here, means no hit line found,It's a miss;
         if (all_reserved)
         {
+            resfail_times++;
             return tlb_result::resfail;
         }
         if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
         {
+            resfail_times++;
             return tlb_result::resfail;
         }
         auto next_line = has_free_line ? free_line : last_line;
@@ -197,6 +214,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
         assert(m_miss_queue.size() < 10);
         outgoing_mf.insert(mf);
         printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
+        miss_times++;
         return tlb_result::miss;
     }
 }
@@ -232,8 +250,8 @@ void l2_tlb::cycle()
             //printdbg_tlb("fail to send mf:%llX\n", mf->get_virtual_addr());
         }
     }
-    while (m_mshrs->access_ready()) //from mshr to response queue
-    {                               //push all the ready access to response Queue
+    while (m_mshrs->access_ready() and (m_config.response_queue_size == 0 or (m_config.response_queue_size != 0 and m_response_queue.size() < m_config.response_queue_size))) //from mshr to response queue
+    {                                                                                                                                                                         //push all the ready access to response Queue
         printdbg_tlb("send m_mshr next access to m response queue\n");
         m_response_queue.push_back(m_mshrs->next_access());
         assert(m_response_queue.size() < 100);

@@ -11,7 +11,11 @@ extern unsigned long long gpu_tot_sim_cycle;
 l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager) : m_config(config),
                                                                         m_page_manager(tlb_page_manager),
                                                                         m_mshrs(std::make_shared<mshr_table>(config.n_mshr_entries, config.n_mshr_max_merge)),
-                                                                        m_tag_arrays(config.n_sets * config.n_associate)
+                                                                        m_tag_arrays(config.n_sets * config.n_associate),
+                                                                        access_times(0),
+                                                                        hit_times(0),
+                                                                        miss_times(0),
+                                                                        resfail_times(0)
 {
     for (unsigned i = 0; i < config.n_sets * config.n_associate; i++)
     {
@@ -35,8 +39,8 @@ void l1_tlb_config::init()
 void l1_tlb_config::reg_option(option_parser_t opp)
 {
 
-    option_parser_register(opp, "-l1tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "64");
-    option_parser_register(opp, "-l1tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
+    option_parser_register(opp, "-l1tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "1");
+    option_parser_register(opp, "-l1tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "64");
     option_parser_register(opp, "-l1tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "64");
     option_parser_register(opp, "-l1tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "50");
     option_parser_register(opp, "-l1tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the size of response queue: 0=unlimited", "0");
@@ -74,6 +78,9 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
     {
         /* code */
         //auto result=tlb_result::hit;
+        access_times++;
+
+        
         auto v_addr = mf->get_virtual_addr();
         //auto v_addr = m_page_manager->get_vir_addr(addr);
         auto m_page_size_log2 = m_config.m_page_size_log2;
@@ -126,6 +133,8 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                         if (m_mshrs->full(block_addr))
                         {
                             printdbg_tlb("l1 hit_reserved and mshr full\n");
+                            
+                            resfail_times++;
                             return tlb_result::resfail;
                         }
                         else
@@ -134,6 +143,8 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                             printdbg_tlb("l1 hit_reserved and push to mshr\n");
                             (*start)->set_last_access_time(time, mask);
                             mf->finished_tlb = true;
+                            miss_times++;
+                            
                             return tlb_result::hit_reserved;
                         }
                         break;
@@ -141,6 +152,8 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                         printdbg_tlb("push to response queu: mf: %llX\n", mf->get_virtual_addr());
                         mf->finished_tlb = true;
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+                        hit_times++;
+                        
                         return tlb_result::hit;
 
                         break;
@@ -166,12 +179,15 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         }
         if (all_reserved)
         {
+            
+            resfail_times++;
             return tlb_result::resfail;
         }
         // when run to here, means no hit line found,It's a miss;
         if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
         {
             printdbg_tlb("miss and mshr fail: mf:%llX\n", mf->get_virtual_addr());
+            resfail_times++;
             return tlb_result::resfail;
         }
         auto next_line = has_free_line ? free_line : last_line;
@@ -180,6 +196,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         m_mshrs->add<1>(block_addr, mf); //adding to new entry
         m_miss_queue.push_back(mf);      //miss
         outgoing_mf.insert(mf);
+        miss_times++;
         return tlb_result::miss;
     }
 }
@@ -261,10 +278,10 @@ unsigned int l1_tlb::outgoing_size()
 
 void l1I_tlb_config::reg_option(option_parser_t opp)
 {
-    option_parser_register(opp, "-l1Itlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "64");
-    option_parser_register(opp, "-l1Itlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "2");
-    option_parser_register(opp, "-l1Itlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "2");
-    option_parser_register(opp, "-l1Itlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "50");
+    option_parser_register(opp, "-l1Itlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "1");
+    option_parser_register(opp, "-l1Itlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "32");
+    option_parser_register(opp, "-l1Itlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "4");//number of instruction
+    option_parser_register(opp, "-l1Itlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "50");//number of cores
     option_parser_register(opp, "-l1Itlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the size of response queue: 0=unlimited", "0");
     option_parser_register(opp, "-l1Itlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the size of miss queue: 0=unlimited", "0");
     option_parser_register(opp, "-l1Itlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the tlb_line_size,currently we only support 4096", "4096");

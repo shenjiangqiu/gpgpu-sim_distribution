@@ -118,7 +118,11 @@ mem_fetch *page_table_walker::recv_probe() const
 
 real_page_table_walker::real_page_table_walker(page_table_walker_config m_config) : m_config(m_config),
                                                                                     m_tag_arrays(m_config.cache_size * m_config.cache_assoc),
-                                                                                    m_mshr(new mshr_table(m_config.mshr_size, m_config.mshr_max_merge))
+                                                                                    m_mshr(new mshr_table(m_config.mshr_size, m_config.mshr_max_merge)),
+                                                                                    access_times(0),
+                                                                                    hit_times(0),
+                                                                                    miss_times(0),
+                                                                                    resfail_times(0)
 {
     for (unsigned i = 0; i < m_config.cache_size * m_config.cache_assoc; i++)
     {
@@ -196,11 +200,13 @@ void real_page_table_walker::cycle()
         else
         {
             auto child_mf = std::get<1>(working_walker[mf]);
+            access_times++;
             auto result = access(child_mf); //that will chage the status of working worker//that will access the cache
             switch (result)
             {
             case tlb_result::hit:
             {
+                hit_times++;
                 auto &target_status = working_walker[mf];
                 auto current_level = std::get<0>(target_status);
                 std::get<0>(target_status) = get_next_level(current_level);
@@ -222,6 +228,7 @@ void real_page_table_walker::cycle()
             }
             case tlb_result::hit_reserved:
             {
+                miss_times++;
                 assert(std::get<2>(working_walker[mf]) == false);
 
                 std::get<2>(working_walker[mf]) = true; //it's on_going;
@@ -230,6 +237,7 @@ void real_page_table_walker::cycle()
             }
             case tlb_result::miss:
             {
+                miss_times++;
                 assert(std::get<2>(working_walker[mf]) == false);
                 std::get<2>(working_walker[mf]) = true;
                 ready_to_send.pop();
@@ -237,6 +245,7 @@ void real_page_table_walker::cycle()
             }
             case tlb_result::resfail:
                 //do nothing
+                resfail_times++;
                 printdbg_ICNT("pagetable walker cache res fail,ready to send size:%lu\n",ready_to_send.size());
                 break;
             default:

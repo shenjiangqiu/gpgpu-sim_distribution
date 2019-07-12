@@ -5,6 +5,146 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "(gdb) LUD core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/LUD/LUD",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/LUD/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/LUD/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) LPS core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/LPS/LPS",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/LPS/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/LPS/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) HS core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/HS/HS",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/HS/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/HS/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) HISTO core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/HISTO/HISTO",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/HISTO/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/HISTO/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) GUPS core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/GUPS/GUPS",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/GUPS/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/GUPS/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) FFT core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/FFT/FFT",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/FFT/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/FFT/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) BFS core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/BFS2/BFS2",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/core-BFS2-11-1000-1000-69317-1562898325",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/BFS2/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
             "name": "(gdb) HISTO ",
             "type": "cppdbg",
             "request": "launch",
