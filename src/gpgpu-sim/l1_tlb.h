@@ -32,6 +32,7 @@ enum class tlb_result{
 };
 
 class l1_tlb{
+    using ull=unsigned long long;
     using us_mf_it=std::unordered_set<mem_fetch*>::iterator;
     
     public:
@@ -55,9 +56,15 @@ class l1_tlb{
     void del_outgoing(mem_fetch* mf);
     void fill(mem_fetch* mf,unsigned long long time);
     unsigned outgoing_size();
-
+    void print_stat() const {
+        printf("l1tlb  access: %llu\n",access_times);
+        printf("l1tlb  hit: %llu\n",hit_times);
+        printf("l1tlb  miss: %llu\n",miss_times);
+        printf("l1tlb  resfail: %llu\n",resfail_times);
+    }
     
     protected:
+    unsigned id;
     l1_tlb_config m_config;//init in constructor
     page_manager* m_page_manager;//init in constructor
     
@@ -68,6 +75,10 @@ class l1_tlb{
     std::deque<mem_fetch*>  m_response_queue;
     std::unordered_set<mem_fetch*> outgoing_mf;
 
+    ull access_times;
+    ull hit_times;
+    ull miss_times;
+    ull resfail_times;
 };
 
 class l1I_tlb_config: public l1_tlb_config{

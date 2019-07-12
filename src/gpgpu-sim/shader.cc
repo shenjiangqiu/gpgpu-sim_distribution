@@ -2637,7 +2637,8 @@ bool ldst_unit::tlb_cycle(warp_inst_t &inst, mem_stage_stall_type &stall_reason,
 
     mem_fetch *mf = m_mf_allocator->alloc(inst, inst.accessq_back());
     //auto physicaddr=mf->physic_addr;
-
+    stall_reason=NO_RC_FAIL;
+    access_type=G_MEM_LD;
     auto result = m_l1_tlb->access(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
     switch (result)
     {
@@ -2646,10 +2647,12 @@ bool ldst_unit::tlb_cycle(warp_inst_t &inst, mem_stage_stall_type &stall_reason,
         inst.accessq_pop_back();
         if (inst.accessq_empty())
         {
+            
             return true;
         }
         else
         {
+            access_type=G_MEM_LD;//TODO
             stall_reason = COAL_STALL;
             return false;
         }
@@ -2665,6 +2668,8 @@ bool ldst_unit::tlb_cycle(warp_inst_t &inst, mem_stage_stall_type &stall_reason,
         }
         else
         {
+            access_type=G_MEM_LD;//TODO
+
             stall_reason = COAL_STALL;
             return false;
         }
@@ -2680,6 +2685,8 @@ bool ldst_unit::tlb_cycle(warp_inst_t &inst, mem_stage_stall_type &stall_reason,
         }
         else
         {
+            access_type=G_MEM_LD;//TODO
+
             stall_reason = COAL_STALL;
             return false;
         }
@@ -2687,6 +2694,8 @@ bool ldst_unit::tlb_cycle(warp_inst_t &inst, mem_stage_stall_type &stall_reason,
     case tlb_result::resfail:
         //at this case, do not pop access from inst, we did nothing for that, remember to delete mf
         delete mf;
+        access_type = G_MEM_LD; //TODO
+
         stall_reason = BK_CONF;
         assert(!inst.accessq_empty());
         return false;
