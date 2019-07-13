@@ -5,6 +5,46 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "(gdb) RED ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/RED/RED",
+            "args": [],
+            //"coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/RED/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/RED/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) SAD core ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/SAD/SAD",
+            "args": [],
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/SAD/core",
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/SAD/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
             "name": "(gdb) LUD core ",
             "type": "cppdbg",
             "request": "launch",
@@ -130,7 +170,7 @@
             "request": "launch",
             "program": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/BFS2/BFS2",
             "args": [],
-            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/core-BFS2-11-1000-1000-69317-1562898325",
+            "coreDumpPath": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/BFS2/core",
             "stopAtEntry": false,
             "cwd": "/home/jshen2/git/private_gpu/ptxtest/pthread_benchmark/BFS2/",
             "environment": [],
