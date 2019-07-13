@@ -1847,7 +1847,7 @@ void gpgpu_sim::cycle()
          }
       }
 
-      if (!((gpu_sim_cycle+gpu_tot_sim_cycle) % 50000)) {
+      if (!(gpu_sim_cycle % 50000)) {
          // deadlock detection 
 
          if (m_config.gpu_deadlock_detect && gpu_sim_insn == last_gpu_sim_insn) {
