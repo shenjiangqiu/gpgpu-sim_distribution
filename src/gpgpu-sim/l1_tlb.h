@@ -42,7 +42,7 @@ class l1_tlb{
 
         }
     }
-    l1_tlb(l1_tlb_config &m_config,page_manager* );
+    l1_tlb(l1_tlb_config &m_config,page_manager* ,const std::string& name);
     l1_tlb()=delete;
     l1_tlb(l1_tlb& other)=delete;
     l1_tlb(l1_tlb&& other)=delete;
@@ -56,20 +56,22 @@ class l1_tlb{
     void del_outgoing(mem_fetch* mf);
     void fill(mem_fetch* mf,unsigned long long time);
     unsigned outgoing_size();
-    void print_stat() const {
-        printf("l1tlb  access: %llu\n",access_times);
-        printf("l1tlb  hit: %llu\n",hit_times);
-        printf("l1tlb  miss: %llu\n",miss_times);
-        printf("l1tlb  resfail: %llu\n",resfail_times);
+    void print_stat(FILE *file) const
+    {
+        
+        fprintf(file, "%s  access: %llu\n",name.c_str(), access_times);
+        fprintf(file, "%s  hit: %llu\n",name.c_str(), hit_times);
+        fprintf(file, "%s  miss: %llu\n",name.c_str(), miss_times);
+        fprintf(file, "%s  resfail: %llu\n",name.c_str(), resfail_times);
     }
-    
-    protected:
+
+protected:
     unsigned id;
     l1_tlb_config m_config;//init in constructor
     page_manager* m_page_manager;//init in constructor
     
-	std::shared_ptr<mshr_table> m_mshrs;
-    std::vector<std::shared_ptr<cache_block_t>> m_tag_arrays;
+	mshr_table* m_mshrs;
+    std::vector<cache_block_t*> m_tag_arrays;
     std::deque<mem_fetch*> m_miss_queue;
     //enum mem_fetch_status m_miss_queue_status;
     std::deque<mem_fetch*>  m_response_queue;
@@ -79,6 +81,8 @@ class l1_tlb{
     ull hit_times;
     ull miss_times;
     ull resfail_times;
+
+    std::string name;
 };
 
 class l1I_tlb_config: public l1_tlb_config{

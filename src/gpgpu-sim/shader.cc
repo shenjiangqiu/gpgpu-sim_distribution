@@ -78,7 +78,7 @@ shader_core_ctx::shader_core_ctx(class gpgpu_sim *gpu,
                                  const struct memory_config *mem_config,
                                  shader_core_stats *stats)
     : core_t(gpu, NULL, config->warp_size, config->n_thread_per_shader),
-      m_l1I_tlb(new l1_tlb(config->m_L1ITLB_config, global_page_manager)),
+      m_l1I_tlb(new l1_tlb(config->m_L1ITLB_config, global_page_manager,"L1ITLB")),
       m_barriers(this, config->max_warps_per_shader, config->max_cta_per_core, config->max_barriers_per_cta, config->warp_size),
       m_active_warps(0), m_dynamic_warp_id(0)
 {
@@ -2386,7 +2386,7 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
                      unsigned sid,
                      unsigned tpc) : pipelined_simd_unit(NULL, config, config->smem_latency, core),
                                      m_next_wb(config),
-                                     m_l1_tlb(new l1_tlb(config->m_L1TLB_config, global_page_manager))
+                                     m_l1_tlb(new l1_tlb(config->m_L1TLB_config, global_page_manager,"L1DTLB"))
 {
     assert(config->smem_latency > 1);
     init(icnt,
