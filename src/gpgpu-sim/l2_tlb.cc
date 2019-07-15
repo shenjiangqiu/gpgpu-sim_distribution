@@ -1,5 +1,5 @@
 #include "l2_tlb.hpp"
-#include"tlb_icnt.h"
+#include "tlb_icnt.h"
 #include "gpu-cache.h"
 #include "icnt_wrapper.h"
 #include <memory>
@@ -16,7 +16,6 @@ using std::endl;
 unsigned global_l2_tlb_index;
 unsigned global_n_cores;
 unsigned global_walkers;
-
 
 l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
                                        m_page_table_walker(new real_page_table_walker(config.m_page_table_walker_config)),
@@ -87,136 +86,132 @@ void l2_tlb_config::set_icnt_index(unsigned int idx)
 }
 tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
 {
-    if (mf == nullptr)
-    {
-        throw std::runtime_error("accessed mf cann't be null");
-    }
-    else
-    {
-        /* code */
-        
-        printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
-        access_times++;
-        auto v_addr = mf->get_virtual_addr();
-        auto m_page_size_log2 = m_config.m_page_size_log2;
-        auto n_set = m_config.n_sets;
-        auto n_assoc = m_config.n_associate;
+    assert(mf != nullptr);
 
-        // get the set_index and tag for searching the tag array.
-        auto set_index = (v_addr >> m_page_size_log2) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
-        auto tag = v_addr & (~static_cast<addr_type>(m_config.m_page_size - 1));           //only need the bits besides page offset
-        auto block_addr = v_addr >> m_page_size_log2;
-        auto start = m_tag_arrays.begin() + n_assoc * set_index;
-        auto end = start + n_assoc;
-        //to find a place to access
-        auto has_free_line = false;
+    /* code */
 
-        unsigned long long oldest_access_time = time;
-        decltype(start) free_line;
-        decltype(start) hit_line;
-        decltype(start) last_line;
-        auto mask = mf->get_access_sector_mask();
-        bool all_reserved = true;
-        for (; start < end; start++)
+    printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+    access_times++;
+    auto v_addr = mf->get_virtual_addr();
+    auto m_page_size_log2 = m_config.m_page_size_log2;
+    auto n_set = m_config.n_sets;
+    auto n_assoc = m_config.n_associate;
+
+    // get the set_index and tag for searching the tag array.
+    auto set_index = (v_addr >> m_page_size_log2) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
+    auto tag = v_addr & (~static_cast<addr_type>(m_config.m_page_size - 1));           //only need the bits besides page offset
+    auto block_addr = v_addr >> m_page_size_log2;
+    auto start = m_tag_arrays.begin() + n_assoc * set_index;
+    auto end = start + n_assoc;
+    //to find a place to access
+    auto has_free_line = false;
+
+    unsigned long long oldest_access_time = time;
+    decltype(start) free_line;
+    decltype(start) hit_line;
+    decltype(start) last_line;
+    auto mask = mf->get_access_sector_mask();
+    bool all_reserved = true;
+    for (; start < end; start++)
+    {
+        if (!(*start)->is_invalid_line())
         {
-            if (!(*start)->is_invalid_line())
+            auto status = (*start)->get_status(mask);
+            if (status != RESERVED)
             {
-                auto status = (*start)->get_status(mask);
-                if (status != RESERVED)
+                assert(status == VALID);
+                all_reserved = false;
+                if ((*start)->get_last_access_time() < oldest_access_time)
                 {
-                    assert(status == VALID);
-                    all_reserved = false;
-                    if ((*start)->get_last_access_time() < oldest_access_time)
-                    {
-                        oldest_access_time = (*start)->get_last_access_time();
-                        last_line = start;
-                    }
-                }
-                else
-                {
-                    assert(time - (*start)->get_alloc_time() < 5000);
-                }
-
-                if ((*start)->m_tag == tag) //ok we find// this is what the identity entry/try to find that entry
-                {
-
-                    auto status = (*start)->get_status(mask);
-                    switch (status)
-                    {
-                    case RESERVED:
-                        if (m_mshrs->full(block_addr))
-                        {
-                            printdbg_tlb("reserved! and mshr full\n");
-                            resfail_times++;
-                            return tlb_result::resfail;
-                        }
-                        else
-                        {
-                            printdbg_tlb("hit reserved! add to mfshr\n");
-                            m_mshrs->add<2>(block_addr, mf); //not new
-                            (*start)->set_last_access_time(time, mask);
-                            miss_times++;
-                            return tlb_result::hit_reserved;
-                        }
-                        break;
-                    case VALID:
-
-                        all_reserved = false;
-                        printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
-                        if(m_config.response_queue_size!=0 and m_config.response_queue_size<=m_response_queue.size()){
-                            resfail_times++;
-                            return tlb_result::resfail;
-                        }
-                        m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
-                        
-                        //assert(m_response_queue.size() < 100);
-                        hit_times++;
-                        return tlb_result::hit;
-
-                        break;
-
-                    case MODIFIED:
-                        throw std::runtime_error("tlb cache can't be modified, it's read only!");
-                    default:
-                        throw std::runtime_error("error");
-                        break;
-                    }
-                    break;
+                    oldest_access_time = (*start)->get_last_access_time();
+                    last_line = start;
                 }
             }
             else
-            { //any time find the valid line, get it!
-                all_reserved = false;
-                if (has_free_line == false)
+            {
+                assert(time - (*start)->get_alloc_time() < 5000);
+            }
+
+            if ((*start)->m_tag == tag) //ok we find// this is what the identity entry/try to find that entry
+            {
+
+                auto status = (*start)->get_status(mask);
+                switch (status)
                 {
-                    has_free_line = true;
-                    free_line = start;
+                case RESERVED:
+                    if (m_mshrs->full(block_addr))
+                    {
+                        printdbg_tlb("reserved! and mshr full\n");
+                        resfail_times++;
+                        return tlb_result::resfail;
+                    }
+                    else
+                    {
+                        printdbg_tlb("hit reserved! add to mfshr\n");
+                        m_mshrs->add<2>(block_addr, mf); //not new
+                        (*start)->set_last_access_time(time, mask);
+                        miss_times++;
+                        return tlb_result::hit_reserved;
+                    }
+                    break;
+                case VALID:
+
+                    all_reserved = false;
+                    printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
+                    if (m_config.response_queue_size != 0 and m_config.response_queue_size <= m_response_queue.size())
+                    {
+                        resfail_times++;
+                        return tlb_result::resfail;
+                    }
+                    m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+
+                    //assert(m_response_queue.size() < 100);
+                    hit_times++;
+                    return tlb_result::hit;
+
+                    break;
+
+                case MODIFIED:
+                    throw std::runtime_error("tlb cache can't be modified, it's read only!");
+                default:
+                    throw std::runtime_error("error");
+                    break;
                 }
+                break;
             }
         }
-        // when run to here, means no hit line found,It's a miss;
-        if (all_reserved)
-        {
-            resfail_times++;
-            return tlb_result::resfail;
+        else
+        { //any time find the valid line, get it!
+            all_reserved = false;
+            if (has_free_line == false)
+            {
+                has_free_line = true;
+                free_line = start;
+            }
         }
-        if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
-        {
-            resfail_times++;
-            return tlb_result::resfail;
-        }
-        auto next_line = has_free_line ? free_line : last_line;
-        (*next_line)->allocate(tag, block_addr, time, mask);
-        printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
-
-        m_mshrs->add<1>(block_addr, mf);
-        m_miss_queue.push_back(mf);
-        assert(m_miss_queue.size() < 10);
-        outgoing_mf.insert(mf);
-        printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
-        miss_times++;
-        return tlb_result::miss;
     }
+    // when run to here, means no hit line found,It's a miss;
+    if (all_reserved)
+    {
+        resfail_times++;
+        return tlb_result::resfail;
+    }
+    if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
+    {
+        resfail_times++;
+        return tlb_result::resfail;
+    }
+    auto next_line = has_free_line ? free_line : last_line;
+    (*next_line)->allocate(tag, block_addr, time, mask);
+    printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+
+    m_mshrs->add<1>(block_addr, mf);
+    m_miss_queue.push_back(mf);
+    assert(m_miss_queue.size() < 10);
+    outgoing_mf.insert(mf);
+    printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
+    miss_times++;
+    return tlb_result::miss;
 }
 bool l2_tlb::is_outgoing(mem_fetch *mf)
 {
@@ -234,12 +229,12 @@ void l2_tlb::cycle()
         printdbg_tlb("send mf:%llX, to icnt\n", mf->get_virtual_addr());
         //auto size = 8 + 8; //ctrl size plus one tlb targe address
         // if (::icnt_has_buffer(m_config.m_icnt_index, size))
-        if(global_tlb_icnt->free(m_config.m_icnt_index,mf->get_tpc()))
+        if (global_tlb_icnt->free(m_config.m_icnt_index, mf->get_tpc()))
         {
             // ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
-            global_tlb_icnt->send(m_config.m_icnt_index,mf->get_tpc(),mf,gpu_sim_cycle+gpu_tot_sim_cycle);
-            printdbg_ICNT("ICNT:L2 to core:To Core:%u,mf:%llx\n",mf->get_tpc(),mf->get_virtual_addr());
-            
+            global_tlb_icnt->send(m_config.m_icnt_index, mf->get_tpc(), mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+            printdbg_ICNT("ICNT:L2 to core:To Core:%u,mf:%llx\n", mf->get_tpc(), mf->get_virtual_addr());
+
             m_response_queue.pop_front();
             printdbg_tlb("successfully send to icnt\n");
         }
@@ -285,28 +280,30 @@ void l2_tlb::cycle()
     if (m_recv_buffer.size() < m_config.recv_buffer_size) //recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
     {
         // mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
-        if(global_tlb_icnt->ready(m_config.m_icnt_index,gpu_sim_cycle+gpu_tot_sim_cycle)){
-            mf=global_tlb_icnt->recv(m_config.m_icnt_index);
+        if (global_tlb_icnt->ready(m_config.m_icnt_index, gpu_sim_cycle + gpu_tot_sim_cycle))
+        {
+            mf = global_tlb_icnt->recv(m_config.m_icnt_index);
             printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,mf:%llx\n", m_config.m_icnt_index, mf->get_virtual_addr());
 
             if (mf->pw_origin != NULL)
             { //it's a pw resquest
-                m_page_table_walker->send_to_recv_buffer(mf);
-                assert(mf->icnt_from>=16);
+                m_page_table_walker->send_to_recv_buffer(mf);//
+                assert(mf->icnt_from >= 16);
                 printdbg_ICNT("this is a page walker request from memory\n");
                 printdbg_PW("from icnt send to page walker!\n");
             }
             else
             {
-                assert(mf->icnt_from<=14);
+                assert(mf->icnt_from <= 14);
                 printdbg_ICNT("this is from Core\n");
                 printdbg_tlb("get mf from icnt!access mf:%llX,from cluster%u\n", mf->get_virtual_addr(), mf->get_tpc());
                 m_recv_buffer.push(mf);
                 printdbg_PW("m recv buffer size:%lu\n", m_recv_buffer.size());
             }
-        }else{
-                printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,NOT READY!\n",  m_config.m_icnt_index);
-
+        }
+        else
+        {
+            printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,NOT READY!\n", m_config.m_icnt_index);
         }
     }
     else
