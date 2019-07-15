@@ -8,18 +8,19 @@ extern unsigned long long gpu_tot_sim_cycle;
 #define TLBDEBUG
 #define PWDEBUG
 #include "debug_macro.h"
-l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager) : m_config(config),
+l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager,const std::string& name) : m_config(config),
                                                                         m_page_manager(tlb_page_manager),
-                                                                        m_mshrs(std::make_shared<mshr_table>(config.n_mshr_entries, config.n_mshr_max_merge)),
+                                                                        m_mshrs(new mshr_table(config.n_mshr_entries, config.n_mshr_max_merge)),
                                                                         m_tag_arrays(config.n_sets * config.n_associate),
                                                                         access_times(0),
                                                                         hit_times(0),
                                                                         miss_times(0),
-                                                                        resfail_times(0)
+                                                                        resfail_times(0),
+                                                                        name(name)
 {
     for (unsigned i = 0; i < config.n_sets * config.n_associate; i++)
     {
-        m_tag_arrays[i] = std::make_shared<line_cache_block>();
+        m_tag_arrays[i] = new line_cache_block();
     }
 }
 l1_tlb_config::l1_tlb_config() {} //in constructor, just allocate the memory, and then parse configur,then

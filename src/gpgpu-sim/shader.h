@@ -1355,6 +1355,7 @@ public:
 
    std::deque<mem_fetch* > l1_latency_queue;
    void L1_latency_queue_cycle();
+   public:
     std::unique_ptr<l1_tlb> m_l1_tlb;
    
 };
@@ -2067,7 +2068,10 @@ public:
     std::vector<pipeline_stage_name_t> m_dispatch_port;
     std::vector<pipeline_stage_name_t> m_issue_port;
     std::vector<simd_function_unit*> m_fu; // stallable pipelines should be last in this array
+    
+    public:
     ldst_unit *m_ldst_unit;
+
     static const unsigned MAX_ALU_LATENCY = 512;
     unsigned num_result_bus;
     std::vector< std::bitset<MAX_ALU_LATENCY>* > m_result_bus;
@@ -2152,6 +2156,7 @@ private:
     const shader_core_config *m_config;
     shader_core_stats *m_stats;
     memory_stats_t *m_memory_stats;
+    public:
     shader_core_ctx **m_core;
 
     unsigned m_cta_issue_next_core;

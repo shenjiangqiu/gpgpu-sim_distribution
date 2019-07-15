@@ -1121,6 +1121,21 @@ void gpgpu_sim::clear_executed_kernel_info()
 void gpgpu_sim::gpu_print_stat() 
 {  
    FILE *statfout = stdout; 
+   FILE *fileout=fopen("gpgpusim_output.txt","w");
+   m_l2_tlb.print_stat(fileout);
+   for(int i=0;i<m_config.num_cluster();i++){
+
+      for(int j=0;j<m_config.m_shader_config.n_simt_cores_per_cluster;j++){
+         m_cluster[i]->m_core[j]->m_l1I_tlb->print_stat(fileout);
+      }
+   }
+   for(int i=0;i<m_config.num_cluster();i++){
+      
+      for(int j=0;j<m_config.m_shader_config.n_simt_cores_per_cluster;j++){
+         m_cluster[i]->m_core[j]->m_ldst_unit->m_l1_tlb->print_stat(fileout);
+      }
+   }
+   
 
    std::string kernel_info_str = executed_kernel_info_string(); 
    fprintf(statfout, "%s", kernel_info_str.c_str()); 
@@ -1171,6 +1186,7 @@ void gpgpu_sim::gpu_print_stat()
    for(unsigned i=0; i<m_config.num_cluster(); i++){
        m_cluster[i]->get_cache_stats(core_cache_stats);
    }
+
    printf("\nTotal_core_cache_stats:\n");
    core_cache_stats.print_stats(stdout, "Total_core_cache_stats_breakdown");
    printf("\nTotal_core_cache_fail_stats:\n");
@@ -1258,6 +1274,7 @@ void gpgpu_sim::gpu_print_stat()
    fflush(stdout);
 
    clear_executed_kernel_info(); 
+   fclose(fileout);
 }
 
 

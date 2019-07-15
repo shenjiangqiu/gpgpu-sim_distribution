@@ -62,9 +62,17 @@ class l2_tlb{
     void del_outgoing(mem_fetch* mf);
     void fill(mem_fetch* mf,unsigned long long time);
 
+    void print_stat(FILE *file) const
+    {
+        fprintf(file, "l2tlb  access: %llu\n", access_times);
+        fprintf(file, "l2tlb  hit: %llu\n", hit_times);
+        fprintf(file, "l2tlb  miss: %llu\n", miss_times);
+        fprintf(file, "l2tlb  resfail: %llu\n", resfail_times);
 
-    
-    protected:
+        m_page_table_walker->print_stat(file);
+    }
+
+protected:
     l2_tlb_config m_config;//init in constructor
     abstract_page_table_walker* m_page_table_walker;
     page_manager* m_page_manager;//init in constructor

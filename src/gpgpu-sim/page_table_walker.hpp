@@ -17,7 +17,7 @@ public:
     virtual mem_fetch *recv() = 0;             //recv and pop;
     virtual mem_fetch *recv_probe() const = 0; //recv not
     virtual void send_to_recv_buffer(mem_fetch* mf)=0;
-    virtual void print_stat() const=0;
+    virtual void print_stat(FILE* file) const=0;
 };
 class latency_queue
 {
@@ -46,7 +46,7 @@ public:
     //virtual bool recv_ready() override;
     virtual mem_fetch *recv() override;             //recv and pop override;
     virtual mem_fetch *recv_probe() const override; //recv not
-    virtual void print_stat() const override{}
+    virtual void print_stat(FILE* file) const override{}
 
 private:
     latency_queue m_latency_queue;
@@ -81,11 +81,11 @@ public:
     virtual void send_to_recv_buffer(mem_fetch* mf){
         icnt_response_buffer.push(mf);
     }
-    virtual void print_stat() const override{
-        printf("pw cache access: %llu\n",access_times);
-        printf("pw cache hit: %llu\n",hit_times);
-        printf("pw cache miss: %llu\n",miss_times);
-        printf("pw cache resfail: %llu\n",resfail_times);
+    virtual void print_stat(FILE* file) const override{
+        fprintf(file,"pw cache access: %llu\n",access_times);
+        fprintf(file,"pw cache hit: %llu\n",hit_times);
+        fprintf(file,"pw cache miss: %llu\n",miss_times);
+        fprintf(file,"pw cache resfail: %llu\n",resfail_times);
     }
 
 private:
