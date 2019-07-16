@@ -5,6 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "(gdb)2DCONV ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/git/private_gpu/ptxtest/polybench-gpu-1.0/CUDA/2DCONV/2DCONV",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/git/private_gpu/ptxtest/polybench-gpu-1.0/CUDA/2DCONV/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
             "name": "(gdb) RED ",
             "type": "cppdbg",
             "request": "launch",
@@ -250,6 +269,25 @@
             "args": ["file" ,"data/b+tree/mil.txt", "command" ,"data/b+tree/command.txt"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/ptxtest/cuda/test/b+tree/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) back ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/ptxtest/cuda/test/backprop/backprop",
+            "args": ["65536"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/ptxtest/cuda/test/backprop/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",

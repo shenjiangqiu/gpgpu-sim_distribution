@@ -2,12 +2,12 @@
 #define PAGE_MANAGER_HPP
 
 #include <bitset>
-#include <unordered_map>
+#include <map>
 #include <set>
 #include <iostream>
 #include <vector>
 using addr_type = unsigned long long;
-using addr_map = std::unordered_map<addr_type, addr_type>;
+using addr_map = std::map<addr_type, addr_type>;
 constexpr unsigned long ALLOCATE_MASK = 0xFFFFFFFFFFFFFF00;
 class page_manager;
 extern page_manager *global_page_manager;

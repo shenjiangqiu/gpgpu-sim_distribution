@@ -4,12 +4,14 @@
 #define PWDEBUG
 #define TLBICNTDEBUG
 #define COREQUEUEDEBUG
+#define NEIDEBUG
 
 #undef TLBDEBUG
 #undef FETCHDEBUG
 #undef PWDEBUG
 #undef TLBICNTDEBUG
 #undef COREQUEUEDEBUG
+#undef NEIDEBUG
 
 #define printdbg(...)                              \
     do                                             \
@@ -68,4 +70,13 @@ extern unsigned long long gpu_tot_sim_cycle;
    printdbg(__VA_ARGS__)
 #else
 #define printdbg_COREQ(...) void(0)
+#endif
+
+#ifdef NEIDEBUG
+extern unsigned long long gpu_sim_cycle;
+extern unsigned long long gpu_tot_sim_cycle;
+#define printdbg_NEI(...) \
+   printdbg(__VA_ARGS__)
+#else
+#define printdbg_NEI(...) void(0)
 #endif

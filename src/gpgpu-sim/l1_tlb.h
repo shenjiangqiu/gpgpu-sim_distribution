@@ -33,7 +33,7 @@ enum class tlb_result{
 
 class l1_tlb{
     using ull=unsigned long long;
-    using us_mf_it=std::unordered_set<mem_fetch*>::iterator;
+    using us_mf_it=std::set<mem_fetch*>::iterator;
     
     public:
     void invalidate(){
@@ -75,7 +75,7 @@ protected:
     std::deque<mem_fetch*> m_miss_queue;
     //enum mem_fetch_status m_miss_queue_status;
     std::deque<mem_fetch*>  m_response_queue;
-    std::unordered_set<mem_fetch*> outgoing_mf;
+    std::set<mem_fetch*> outgoing_mf;
 
     ull access_times;
     ull hit_times;

@@ -48,9 +48,9 @@ ifeq ($(GNUC_CPP0X), 1)
 endif
 
 ifneq ($(DEBUG),1)
-	OPTFLAGS += -O3  -g
+	OPTFLAGS += -O3 -ggdb  
 else
-	CXXFLAGS += -g
+	CXXFLAGS += -ggdb
 endif
 
 POWER_FLAGS=
