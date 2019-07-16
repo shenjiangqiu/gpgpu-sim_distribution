@@ -42,7 +42,7 @@ class l2_tlb_config{
 class l2_tlb{
     using ull=unsigned long long;
     //TODO add abstract_page_walker, inti page_walker.
-    using us_mf_it=std::unordered_set<mem_fetch*>::iterator;
+    using us_mf_it=std::set<mem_fetch*>::iterator;
     
     public:
     void invalidate(){
@@ -82,7 +82,7 @@ protected:
     std::deque<mem_fetch*> m_miss_queue;
     //enum mem_fetch_status m_miss_queue_status;
     std::deque<mem_fetch*>  m_response_queue;
-    std::unordered_set<mem_fetch*> outgoing_mf;//we do not use multiple set
+    std::set<mem_fetch*> outgoing_mf;//we do not use multiple set
     std::queue<mem_fetch*> m_recv_buffer;
 
     ull access_times;

@@ -44,7 +44,7 @@ void mem_fetch::reset_raw_addr(){
        m_mem_config->m_address_mapping.addrdec_tlx(physic_addr, &m_raw_addr);
 
 }
-//std::unordered_map<mem_fetch*,unsigned long long> mf_map;
+//std::map<mem_fetch*,unsigned long long> mf_map;
 mem_fetch::mem_fetch( const mem_access_t &access, 
                       const warp_inst_t *inst,
                       unsigned ctrl_size, 
