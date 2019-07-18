@@ -80,9 +80,12 @@ mem_fetch::mem_fetch( const mem_access_t &access,
    m_tpc = tpc;
    m_wid = wid;
 
-   virtual_addr=access.get_addr();
-   if (sid ==(unsigned) -1)
-       physic_addr = virtual_addr; //that is a wb request, no need to do the translation
+   virtual_addr = access.get_addr();
+   if (sid == (unsigned)-1 || (inst &&
+       ((inst->space.get_type() != global_space) &&
+        (inst->space.get_type() != local_space) &&
+        (inst->space.get_type() != param_space_local))))
+       physic_addr = virtual_addr; //that is a wb request or none-mem request, no need to do the translation
    else
        physic_addr = global_page_manager->translate(virtual_addr);
 

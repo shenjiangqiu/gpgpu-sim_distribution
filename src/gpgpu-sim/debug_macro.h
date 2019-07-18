@@ -5,14 +5,14 @@
 #define TLBICNTDEBUG
 #define COREQUEUEDEBUG
 #define NEIDEBUG
-
+#define PTRNGDEBUG
 #undef TLBDEBUG
 #undef FETCHDEBUG
-// #undef PWDEBUG
+#undef PWDEBUG
 #undef TLBICNTDEBUG
 #undef COREQUEUEDEBUG
-// #undef NEIDEBUG
-
+#undef NEIDEBUG
+//#undef PTRNGDEBUG
 #define printdbg(...)                              \
     do                                             \
     {                                              \
@@ -76,6 +76,17 @@ extern unsigned long long gpu_tot_sim_cycle;
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
 #define printdbg_NEI(...) \
+   printdbg(__VA_ARGS__)
+#else
+#define printdbg_NEI(...) void(0)
+#endif
+
+
+
+#ifdef PTRNGDEBUG
+extern unsigned long long gpu_sim_cycle;
+extern unsigned long long gpu_tot_sim_cycle;
+#define printdbg_PTRNG(...) \
    printdbg(__VA_ARGS__)
 #else
 #define printdbg_NEI(...) void(0)

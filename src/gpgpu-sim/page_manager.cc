@@ -1,6 +1,7 @@
 #include "page_manager.h"
 #include <stdlib.h>
 #include <assert.h>
+#include "debug_macro.h"
 //range
 
 page_manager *global_page_manager;
@@ -307,7 +308,7 @@ void page_table::add_page_table_entry(addr_type virtual_page_number, addr_type p
         {
             entries[index] = m_page_manager->creat_new_page_table(get_next_level(m_level));
             entries[index]->add_page_table_entry(virtual_page_number, physic_page_number);
-            if(m_level==page_table_level::L3){
+            if(m_level==page_table_level::L2){
                 m_page_manager->update_range_pt(virtual_page_number &( (unsigned long long )-1 <<21),entries[index]->m_physic_address);
             }
             return;

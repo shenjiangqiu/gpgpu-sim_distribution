@@ -1,11 +1,13 @@
 #ifndef PAGE_MANAGER_H
 #define PAGE_MANAGER_H
-
+#include "debug_macro.h"
 #include <bitset>
 #include <map>
 #include <set>
 #include <iostream>
 #include <vector>
+#include<stdlib.h>
+#include<assert.h>
 using addr_type = unsigned long long;
 using addr_map = std::map<addr_type, addr_type>;
 constexpr unsigned long ALLOCATE_MASK = 0xFFFFFFFFFFFFFF00;
@@ -86,16 +88,45 @@ constexpr addr_type code_start = 0x0000f0000000;      //that is get from test.
 constexpr addr_type virtual_start = 0x0000c0000000;
 constexpr addr_type virtual_end = 0x0000F0000000;
 class page_table;
+
+#define printdbg_mset_pt(m_pt_set) \
+            if (m_pt_set.empty())\
+            {\
+                printdbg_PTRNG("empty!\n\n");\
+            }\
+            else\
+            {\
+                for (auto entry : m_pt_set)\
+                {\
+                    printdbg_PTRNG("start_addr:%llx,physic_addr:%llx,size:%u,start_no:%llx;physic_no:%llx\n",\
+                                   std::get<0>(entry),\
+                                   std::get<1>(entry),\
+                                   std::get<2>(entry),\
+                                   std::get<0>(entry) >> 21,\
+                                   std::get<1>(entry) >> 12);\
+                }\
+                printdbg_PTRNG("\n\n");\
+            }\
+
 class range_page_table
 {
 public:
     //every time we add a new pagetable we need to call this function,option:0:add,1 del
     void update(addr_type virtual_page_addr, addr_type pt_physic_addr, unsigned option = 0)
     {
+        printdbg_PTRNG("start to update: virtual_page_addr:%llx, physic_page_addr:%llx,v_no:%llx,p_no:%llx\n",
+                       /* vaddr */ virtual_page_addr,
+                       /* pt_paddr */ pt_physic_addr,
+                       /* l2 number */ virtual_page_addr >> 21,
+                       /* pt_physic_number */ pt_physic_addr >> 12);
+        printdbg_PTRNG("before update:\n");
+        printdbg_mset_pt(m_pt_set);
         auto range_to_insert = std::make_tuple(virtual_page_addr, pt_physic_addr, 1);
         if (m_pt_set.empty())
         {
             m_pt_set.insert(range_to_insert);
+            printdbg_PTRNG("after update:\n");
+            printdbg_mset_pt(m_pt_set);
             return;
         }
         //find the first 
@@ -104,9 +135,13 @@ public:
         if(range_pre==m_pt_set.end()){
             //it's the smallest entry now;
 
-
+            insert_and_merge(range_to_insert);
             //code here
-            return ;
+
+            printdbg_PTRNG("after update:\n");
+            printdbg_mset_pt(m_pt_set);
+
+            return;
         }
 
         //here we find some small entry;
@@ -123,10 +158,15 @@ public:
         case 2:
             insert_and_merge(range_to_insert);
             break;
-
+        case 3:
+            insert_and_merge(range_to_insert);
+            break;
         default:
+            throw "can't reach there";
             break;
         }
+        printdbg_PTRNG("after update:\n");
+        printdbg_mset_pt(m_pt_set);
 
         //old code
     }
@@ -156,7 +196,7 @@ private:
     void insert_and_merge(const page_table_range_buffer_entry& to_insert){
         assert(std::get<2>(to_insert)==1);
         
-        auto upper=m_pt_set.upper_bound(to_insert);
+        auto upper=m_pt_set.upper_bound(to_insert);//find bug here
         if(upper==m_pt_set.end()) {
             m_pt_set.insert(to_insert);
             return;
@@ -171,6 +211,7 @@ private:
             m_pt_set.insert(replace_entry);
             return;
         }
+        m_pt_set.insert(to_insert);
 
     }
     decltype(m_pt_set.begin()) find_the_less_or_equal_range(const page_table_range_buffer_entry & to_compare){
@@ -190,10 +231,17 @@ private:
     unsigned get_pt_addr_gap(const page_table_range_buffer_entry& from,const page_table_range_buffer_entry& to){
         return (std::get<1>(to)-std::get<1>(from))>>12;
     }
-    //return 0 mean need to append and connect, return 1 means inside and should throw, return 2 means we need a new entry and connect;
+    //return 0 mean need to append and connect, return 1 means inside and should throw, return 2 means we need a new entry and connect,3 means it's not belong to that range!;
     unsigned the_position_of_the_entry(decltype(m_pt_set.begin()) existing_entry,const page_table_range_buffer_entry& to_insert){
         auto page_num_gap=get_page_gap(*existing_entry,to_insert);
         auto pt_addr_gap=get_pt_addr_gap(*existing_entry,to_insert);
+        //find a bug!
+        if(page_num_gap!=pt_addr_gap){
+            //that means is't not blong to one range!
+            return 3;
+        }
+
+        assert(page_num_gap==pt_addr_gap);
         int size_gp=page_num_gap-std::get<2>(*existing_entry);
         if(size_gp==0){
             return 0;
