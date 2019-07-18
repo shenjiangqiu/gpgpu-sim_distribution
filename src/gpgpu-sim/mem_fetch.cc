@@ -34,7 +34,7 @@
 #include "shader.h"
 #include "visualizer.h"
 #include "gpu-sim.h"
-#include "page_manager.hpp"
+#include "page_manager.h"
 unsigned mem_fetch::sm_next_mf_request_uid=1;
 #ifdef TLBDEBUG
 int mem_fetch::m_nums=0;

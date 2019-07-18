@@ -54,8 +54,8 @@
 #define FETCHDEBUG
 #define PWDEBUG
 #include "debug_macro.h"
-#include "page_manager.hpp"
-#include "l2_tlb.hpp"
+#include "page_manager.h"
+#include "l2_tlb.h"
 /////////////////////////////////////////////////////////////////////////////
 
 std::list<unsigned> shader_core_ctx::get_regs_written(const inst_t &fvt) const

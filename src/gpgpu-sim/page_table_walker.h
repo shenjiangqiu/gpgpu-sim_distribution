@@ -125,7 +125,7 @@ private:
     std::list<std::tuple<bool, mem_fetch *, bool, page_table_level, addr_type>> waiting_buffer;
     //0:coaled  1:mf  2:wating?  3:level  4:addr
 
-    bool is_neighbor(const mem_fetch *origin, const mem_fetch *target, page_table_level the_level)
+    static bool is_neighbor(const mem_fetch *origin, const mem_fetch *target, page_table_level the_level)
     {
         printdbg_NEI("try to judge if it's neiborhood\n");
         auto num_leve = (unsigned)the_level;

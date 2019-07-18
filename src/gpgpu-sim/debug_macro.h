@@ -8,10 +8,10 @@
 
 #undef TLBDEBUG
 #undef FETCHDEBUG
-#undef PWDEBUG
+// #undef PWDEBUG
 #undef TLBICNTDEBUG
 #undef COREQUEUEDEBUG
-#undef NEIDEBUG
+// #undef NEIDEBUG
 
 #define printdbg(...)                              \
     do                                             \

@@ -45,7 +45,7 @@
 #include "intersim_config.hpp"
 #include "network.hpp"
 #include "trace.h"
-#include"../gpgpu-sim/l2_tlb.hpp"
+#include"../gpgpu-sim/l2_tlb.h"
 InterconnectInterface* InterconnectInterface::New(const char* const config_file)
 {
   if (! config_file ) {

@@ -1,11 +1,13 @@
-#include "l2_tlb.hpp"
+#include "l2_tlb.h"
 #include "tlb_icnt.h"
-#include "page_table_walker.hpp"
+#include "page_table_walker.h"
 #include <map>
 //#define TLBDEBUG
 
 #include "debug_macro.h"
 #include "icnt_wrapper.h"
+#include<memory>
+#include<functional>
 // constexpr addr_type masks[4] = {0xFF8000000000, 0x7FC0000000, 0x3FE00000, 0x1FF000};
 // constexpr addr_type masks_accumulate[4] = {0xFF8000000000, 0xFFFFC0000000, 0xFFFFFFE00000, 0xFFFFFFFFF000};
 // constexpr unsigned mask_offset[4] = {39, 30, 21, 12};
@@ -515,6 +517,7 @@ void real_page_table_walker::cycle()
                 }   
 
                 #endif
+                /* this code is wrong, guess why!?
                 for (auto start = waiting_buffer.begin(); start != waiting_buffer.end(); start++)
                 {
                     if (is_neighbor(std::get<1>(*start), mf_origin, level))
@@ -523,6 +526,26 @@ void real_page_table_walker::cycle()
                         start = waiting_buffer.erase(start);
                     }
                 }
+                */
+                for (auto start = waiting_buffer.begin(); start != waiting_buffer.end();)
+                {
+                    if (is_neighbor(std::get<1>(*start), mf_origin, level))
+                    {
+                        response_queue.push(std::get<1>(*start));
+                        start = waiting_buffer.erase(start);
+                    }
+                    else
+                    {
+                        start++;
+                    }
+                }
+                /* using namespace std::placeholders;
+                
+                auto get_from_tuple=[](std::tuple< bool, mem_fetch *, bool, page_table_level, addr_type> tp){
+                    return std::get<1>(tp);
+                };
+                auto is_neibor_wrapper=std::bind(is_neighbor,mf_origin,std::bind(get_from_tuple,_1),level);
+                waiting_buffer.remove_if(is_neibor_wrapper); */
                 printdbg_NEI("after scan\n");
                 printdbg_NEI("current waiting queue:\n");
                 #ifdef NEIDEBUG

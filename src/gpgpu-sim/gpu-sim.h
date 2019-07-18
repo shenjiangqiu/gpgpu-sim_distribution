@@ -38,7 +38,7 @@
 #include <list>
 #include <stdio.h>
 
-#include"l2_tlb.hpp"
+#include"l2_tlb.h"
 
 // constants for statistics printouts
 #define GPU_RSTAT_SHD_INFO 0x1
