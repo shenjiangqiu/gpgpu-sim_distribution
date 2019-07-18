@@ -1,12 +1,12 @@
-#ifndef L2_TLB_HPP
-#define L2_TLB_HPP
+#ifndef L2_TLB_H
+#define L2_TLB_H
 #include"l1_tlb.h"
 #include"../option_parser.h"
 #include<string>
 #include"gpu-cache.h"
 #include"mem_fetch.h"
-#include "page_manager.hpp"
-#include"page_table_walker.hpp"
+#include "page_manager.h"
+#include"page_table_walker.h"
 #include<deque>
 #include <utility>
 #include<memory>

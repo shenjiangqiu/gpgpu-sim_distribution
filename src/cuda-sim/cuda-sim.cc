@@ -25,9 +25,9 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#include"../gpgpu-sim/page_manager.hpp"
+#include"../gpgpu-sim/page_manager.h"
 #include "cuda-sim.h"
-#include"../gpgpu-sim/l2_tlb.hpp"
+#include"../gpgpu-sim/l2_tlb.h"
 #include "instructions.h"
 #include "ptx_ir.h"
 #include "ptx.tab.h"

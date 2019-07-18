@@ -1,4 +1,4 @@
-#include "l2_tlb.hpp"
+#include "l2_tlb.h"
 #include "tlb_icnt.h"
 #include "gpu-cache.h"
 #include "icnt_wrapper.h"

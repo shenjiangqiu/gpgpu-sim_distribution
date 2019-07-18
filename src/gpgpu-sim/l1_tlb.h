@@ -4,7 +4,7 @@
 #include<string>
 #include"gpu-cache.h"
 #include"mem_fetch.h"
-#include "page_manager.hpp"
+#include "page_manager.h"
 #include<deque>
 #include <utility>
 #include<memory>
