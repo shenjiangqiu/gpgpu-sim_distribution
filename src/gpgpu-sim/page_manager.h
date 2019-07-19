@@ -88,7 +88,7 @@ constexpr addr_type code_start = 0x0000f0000000;      //that is get from test.
 constexpr addr_type virtual_start = 0x0000c0000000;
 constexpr addr_type virtual_end = 0x0000F0000000;
 class page_table;
-
+#ifdef PTRNGDEBUG
 #define printdbg_mset_pt(m_pt_set)                                                                    \
     if (m_pt_set.empty())                                                                             \
     {                                                                                                 \
@@ -107,7 +107,10 @@ class page_table;
         }                                                                                             \
         printdbg_PTRNG("\n\n");                                                                       \
     }
-
+#else
+#define printdbg_mset_pt(m_pt_set)                                                                    \
+void(0)
+#endif
 class range_page_table
 {
 public:
@@ -173,7 +176,7 @@ public:
     }
     bool is_in_range(addr_type virtual_addr)
     {
-        assert(virtual_addr & 0x1FFFFF == 0);
+        assert((virtual_addr & 0x1FFFFF )== 0);
         auto entry = find_the_less_or_equal_range(std::make_tuple(virtual_addr, 0, 0));
         if (entry == m_pt_set.end())
         {
@@ -378,11 +381,11 @@ public:
     //void update_pt_range_buffer();
     bool is_in_range(addr_type virtual_addr)
     {
-        m_range_page_table.is_in_range(virtual_addr);
+        return m_range_page_table.is_in_range(virtual_addr);
     }
     page_table_range_buffer_entry get_range_entry(addr_type virtual_addr)
     {
-        m_range_page_table.get_range_entry(virtual_addr);
+        return m_range_page_table.get_range_entry(virtual_addr);
     }
 
 private:
