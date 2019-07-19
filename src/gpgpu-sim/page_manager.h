@@ -6,8 +6,8 @@
 #include <set>
 #include <iostream>
 #include <vector>
-#include<stdlib.h>
-#include<assert.h>
+#include <stdlib.h>
+#include <assert.h>
 using addr_type = unsigned long long;
 using addr_map = std::map<addr_type, addr_type>;
 constexpr unsigned long ALLOCATE_MASK = 0xFFFFFFFFFFFFFF00;
@@ -89,24 +89,24 @@ constexpr addr_type virtual_start = 0x0000c0000000;
 constexpr addr_type virtual_end = 0x0000F0000000;
 class page_table;
 
-#define printdbg_mset_pt(m_pt_set) \
-            if (m_pt_set.empty())\
-            {\
-                printdbg_PTRNG("empty!\n\n");\
-            }\
-            else\
-            {\
-                for (auto entry : m_pt_set)\
-                {\
-                    printdbg_PTRNG("start_addr:%llx,physic_addr:%llx,size:%u,start_no:%llx;physic_no:%llx\n",\
-                                   std::get<0>(entry),\
-                                   std::get<1>(entry),\
-                                   std::get<2>(entry),\
-                                   std::get<0>(entry) >> 21,\
-                                   std::get<1>(entry) >> 12);\
-                }\
-                printdbg_PTRNG("\n\n");\
-            }\
+#define printdbg_mset_pt(m_pt_set)                                                                    \
+    if (m_pt_set.empty())                                                                             \
+    {                                                                                                 \
+        printdbg_PTRNG("empty!\n\n");                                                                 \
+    }                                                                                                 \
+    else                                                                                              \
+    {                                                                                                 \
+        for (auto entry : m_pt_set)                                                                   \
+        {                                                                                             \
+            printdbg_PTRNG("start_addr:%llx,physic_addr:%llx,size:%u,start_no:%llx;physic_no:%llx\n", \
+                           std::get<0>(entry),                                                        \
+                           std::get<1>(entry),                                                        \
+                           std::get<2>(entry),                                                        \
+                           std::get<0>(entry) >> 21,                                                  \
+                           std::get<1>(entry) >> 12);                                                 \
+        }                                                                                             \
+        printdbg_PTRNG("\n\n");                                                                       \
+    }
 
 class range_page_table
 {
@@ -129,10 +129,11 @@ public:
             printdbg_mset_pt(m_pt_set);
             return;
         }
-        //find the first 
-        auto range_pre=find_the_less_or_equal_range(range_to_insert);
+        //find the first
+        auto range_pre = find_the_less_or_equal_range(range_to_insert);
 
-        if(range_pre==m_pt_set.end()){
+        if (range_pre == m_pt_set.end())
+        {
             //it's the smallest entry now;
 
             insert_and_merge(range_to_insert);
@@ -145,7 +146,7 @@ public:
         }
 
         //here we find some small entry;
-        switch (the_position_of_the_entry(range_pre,range_to_insert))
+        switch (the_position_of_the_entry(range_pre, range_to_insert))
         {
         case 0:
             /* code */
@@ -170,84 +171,128 @@ public:
 
         //old code
     }
+    bool is_in_range(addr_type virtual_addr)
+    {
+        assert(virtual_addr & 0x1FFFFF == 0);
+        auto entry = find_the_less_or_equal_range(std::make_tuple(virtual_addr, 0, 0));
+        if (entry == m_pt_set.end())
+        {
+            return false;
+        }
+        else
+        {
+            auto gap = get_page_gap(*entry, std::make_tuple(virtual_addr, 0, 0));
+            if (gap < std::get<2>(*entry))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+    page_table_range_buffer_entry get_range_entry(addr_type virtual_addr)
+    {
+        assert(is_in_range(virtual_addr));
+        auto entry = find_the_less_or_equal_range(std::make_tuple(virtual_addr, 0, 0));
+        return *entry;
+    }
 
 private:
     pt_range_buffer_set m_pt_set;
-    void append_existing_entry_and_merge(decltype(m_pt_set.begin()) to_append){
-        auto upper=m_pt_set.upper_bound(*to_append);
-        if(upper==m_pt_set.end()) {
-            auto replace_entry=*to_append;
+    void append_existing_entry_and_merge(decltype(m_pt_set.begin()) to_append)
+    {
+        auto upper = m_pt_set.upper_bound(*to_append);
+        if (upper == m_pt_set.end())
+        {
+            auto replace_entry = *to_append;
             std::get<2>(replace_entry)++;
             m_pt_set.erase(to_append);
             m_pt_set.insert(replace_entry);
             return;
         }
 
-        auto page_gap=get_page_gap(*to_append,*upper);
-        if(page_gap==std::get<2>(*to_append)+1){
-            auto replace_entry=*to_append;
-            std::get<2>(replace_entry)+=(std::get<2>(*upper)+1);
+        auto page_gap = get_page_gap(*to_append, *upper);
+        if (page_gap == std::get<2>(*to_append) + 1)
+        {
+            auto replace_entry = *to_append;
+            std::get<2>(replace_entry) += (std::get<2>(*upper) + 1);
             m_pt_set.erase(to_append);
             m_pt_set.insert(replace_entry);
             return;
         }
-
     }
-    void insert_and_merge(const page_table_range_buffer_entry& to_insert){
-        assert(std::get<2>(to_insert)==1);
-        
-        auto upper=m_pt_set.upper_bound(to_insert);//find bug here
-        if(upper==m_pt_set.end()) {
+    void insert_and_merge(const page_table_range_buffer_entry &to_insert)
+    {
+        assert(std::get<2>(to_insert) == 1);
+
+        auto upper = m_pt_set.upper_bound(to_insert); //find bug here
+        if (upper == m_pt_set.end())
+        {
             m_pt_set.insert(to_insert);
             return;
         }
 
-        auto page_gap=get_page_gap(to_insert,*upper);
-        if(page_gap==std::get<2>(to_insert)){//==1
-            auto replace_entry=to_insert;
-            std::get<2>(replace_entry)+=std::get<2>(*upper);
+        auto page_gap = get_page_gap(to_insert, *upper);
+        if (page_gap == std::get<2>(to_insert))
+        { //==1
+            auto replace_entry = to_insert;
+            std::get<2>(replace_entry) += std::get<2>(*upper);
             //std::get<2>(replace_entry)+=(std::get<2>(*upper)+1);
             m_pt_set.erase(upper);
             m_pt_set.insert(replace_entry);
             return;
         }
         m_pt_set.insert(to_insert);
-
     }
-    decltype(m_pt_set.begin()) find_the_less_or_equal_range(const page_table_range_buffer_entry & to_compare){
-        if(m_pt_set.empty()) return m_pt_set.end();
-        auto ret=m_pt_set.upper_bound(to_compare);
-        if(ret!=m_pt_set.begin()){
+    decltype(m_pt_set.begin()) find_the_less_or_equal_range(const page_table_range_buffer_entry &to_compare)
+    {
+        if (m_pt_set.empty())
+            return m_pt_set.end();
+        auto ret = m_pt_set.upper_bound(to_compare);
+        if (ret != m_pt_set.begin())
+        {
             return std::prev(ret);
-        }else{
+        }
+        else
+        {
             return m_pt_set.end();
         }
-        
     }
-    unsigned get_page_gap(const page_table_range_buffer_entry& from,const page_table_range_buffer_entry& to){
-        return (std::get<0>(to)-std::get<0>(from))>>21;
+    unsigned get_page_gap(const page_table_range_buffer_entry &from, const page_table_range_buffer_entry &to)
+    {
+        return (std::get<0>(to) - std::get<0>(from)) >> 21;
     }
 
-    unsigned get_pt_addr_gap(const page_table_range_buffer_entry& from,const page_table_range_buffer_entry& to){
-        return (std::get<1>(to)-std::get<1>(from))>>12;
+    unsigned get_pt_addr_gap(const page_table_range_buffer_entry &from, const page_table_range_buffer_entry &to)
+    {
+        return (std::get<1>(to) - std::get<1>(from)) >> 12;
     }
     //return 0 mean need to append and connect, return 1 means inside and should throw, return 2 means we need a new entry and connect,3 means it's not belong to that range!;
-    unsigned the_position_of_the_entry(decltype(m_pt_set.begin()) existing_entry,const page_table_range_buffer_entry& to_insert){
-        auto page_num_gap=get_page_gap(*existing_entry,to_insert);
-        auto pt_addr_gap=get_pt_addr_gap(*existing_entry,to_insert);
+    unsigned the_position_of_the_entry(decltype(m_pt_set.begin()) existing_entry, const page_table_range_buffer_entry &to_insert)
+    {
+        auto page_num_gap = get_page_gap(*existing_entry, to_insert);
+        auto pt_addr_gap = get_pt_addr_gap(*existing_entry, to_insert);
         //find a bug!
-        if(page_num_gap!=pt_addr_gap){
+        if (page_num_gap != pt_addr_gap)
+        {
             //that means is't not blong to one range!
             return 3;
         }
 
-        assert(page_num_gap==pt_addr_gap);
-        int size_gp=page_num_gap-std::get<2>(*existing_entry);
-        if(size_gp==0){
+        assert(page_num_gap == pt_addr_gap);
+        int size_gp = page_num_gap - std::get<2>(*existing_entry);
+        if (size_gp == 0)
+        {
             return 0;
-        }else if(size_gp<0){
+        }
+        else if (size_gp < 0)
+        {
             return 1;
-        }else{
+        }
+        else
+        {
             return 2;
         }
     }
@@ -262,8 +307,9 @@ public:
     page_manager(/* args */);
     ~page_manager();
     void *cudaMalloc(size_t size);
-    void update_range_pt(addr_type virtual_addr,addr_type pt_physic_addr){
-        m_range_page_table.update(virtual_addr,pt_physic_addr);
+    void update_range_pt(addr_type virtual_addr, addr_type pt_physic_addr)
+    {
+        m_range_page_table.update(virtual_addr, pt_physic_addr);
     }
     //addr_type get_vir_addr(addr_type origin);
     void allocate_page(addr_type first_page, size_t size);
@@ -330,6 +376,14 @@ public:
     void add_page_table(addr_type virtual_page_number, addr_type physic_page_number);
     page_table *creat_new_page_table(page_table_level level);
     //void update_pt_range_buffer();
+    bool is_in_range(addr_type virtual_addr)
+    {
+        m_range_page_table.is_in_range(virtual_addr);
+    }
+    page_table_range_buffer_entry get_range_entry(addr_type virtual_addr)
+    {
+        m_range_page_table.get_range_entry(virtual_addr);
+    }
 
 private:
     range_page_table m_range_page_table;

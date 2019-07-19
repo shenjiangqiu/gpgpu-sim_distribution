@@ -82,6 +82,7 @@ void page_table_walker_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-page_table_walker_cache_assoc", option_dtype::OPT_UINT32, &cache_assoc, "the cache_assoc", "2");
     option_parser_register(opp, "-page_table_walker_mshr_size", option_dtype::OPT_UINT32, &mshr_size, "mshr_size", "16");
     option_parser_register(opp, "-page_table_walker_mshr_max_merge", option_dtype::OPT_UINT32, &mshr_max_merge, "mshr_max_merge", "8");
+    option_parser_register(opp, "-page_table_walker_range_cache_size", option_dtype::OPT_UINT32, &m_range_size, "range size", "10");
 }
 bool latency_queue::free() const
 {
@@ -128,7 +129,8 @@ real_page_table_walker::real_page_table_walker(page_table_walker_config m_config
                                                                                     access_times(0),
                                                                                     hit_times(0),
                                                                                     miss_times(0),
-                                                                                    resfail_times(0)
+                                                                                    resfail_times(0),
+                                                                                    m_range_cache_size(m_config.m_range_size)
 {
     for (unsigned i = 0; i < m_config.cache_size * m_config.cache_assoc; i++)
     {
@@ -177,6 +179,13 @@ void real_page_table_walker::cycle()
     //send working walker  to access,and to miss queue;or send to response queue
     //send miss queue to icnt;
     //get from icnt and deal with working worker, or send to response queue;
+    if( ! range_latency_queue.empty()){
+        if(range_latency_queue.front().second<=gpu_sim_cycle+gpu_tot_sim_cycle){
+            fill_to_range_cache(range_latency_queue.front().first);
+            range_latency_queue.pop();
+        }
+    }
+
     if (working_walker.size() < m_config.walker_size and !waiting_buffer.empty()) //it's from waiting queue, to working set.
     {
         //this code is hard to understand, It's according to paper: neighborhood,Micro 18, please read the peper fist.
@@ -840,9 +849,22 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
 bool real_page_table_walker::send(mem_fetch *mf)
 {
     assert(waiting_buffer.size() < m_config.waiting_queue_size);
+
+
     if (waiting_buffer.size() < m_config.waiting_queue_size)
     {
-        waiting_buffer.push_back(std::make_tuple(false, mf, false, page_table_level::L4_ROOT, 0));
+        auto is_hit_in_range=access_range(mf->get_virtual_addr());
+        if (is_hit_in_range){
+            waiting_buffer.push_back(std::make_tuple(false, mf, false, page_table_level::L1_LEAF, 0));
+        }
+        else{
+            //check if the range exist in memory!
+            auto is_hit=global_page_manager->is_in_range(mf->get_virtual_addr() & ~0x1fffff);
+            if(is_hit){
+                range_latency_queue.push(std::make_pair(mf,gpu_sim_cycle+gpu_tot_sim_cycle+200));
+            }
+            waiting_buffer.push_back(std::make_tuple(false, mf, false, page_table_level::L4_ROOT, 0));
+        }
         printdbg_PW("waiting queu,size is %lu\n", waiting_buffer.size());
 
         //assert(waiting_queue.size()<=m_config.waiting_queue_size);
