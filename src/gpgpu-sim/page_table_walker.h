@@ -64,6 +64,7 @@ struct page_table_walker_config
     unsigned cache_assoc;
     unsigned mshr_size;
     unsigned mshr_max_merge;
+    unsigned m_range_size;
     void reg_option(option_parser_t opp);
     void init();
 };
@@ -149,6 +150,74 @@ private:
     ull hit_times;
     ull miss_times;
     ull resfail_times;
+    // std::get<0>: vir_addr;std::get<1>: pt_physic_addr,std::get<2>: size,std::get<3>: last access time;//allocate on fill
+    using pt_range_cache=std::tuple<addr_type,addr_type,unsigned,unsigned long long ,bool>;
+    unsigned m_range_cache_size;
+    std::list<pt_range_cache> m_range_cache;
+    //queue for record incoming request
+    std::queue<std::pair<mem_fetch*,unsigned long long>> range_latency_queue;
+    void fill_to_range_cache(mem_fetch *mf)
+    {
+        auto range_entry=global_page_manager->get_range_entry(mf->get_virtual_addr() & ~0x1fffff);
+        if(m_range_cache.empty()) {
+            m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
+            std::get<1>(range_entry),\
+            std::get<2>(range_entry),\
+            gpu_sim_cycle+gpu_tot_sim_cycle,\
+            true));
+        }
+        else if(access_range(mf->get_virtual_addr())){
+            //it' s in the cache already, do nothing
+        }else if(m_range_cache.size()<m_range_cache_size){
+            m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
+            std::get<1>(range_entry),\
+            std::get<2>(range_entry),\
+            gpu_sim_cycle+gpu_tot_sim_cycle,\
+            true));
+        }else{
+            //find the oldeast;
+            unsigned long long oldest=gpu_sim_cycle+gpu_tot_sim_cycle;
+            decltype(m_range_cache.begin()) oldest_itr;
+            for(auto start=m_range_cache.begin();start!=m_range_cache.end();start++){
+                if(std::get<4>(*start)){
+                    if(std::get<3>(*start)<oldest){
+                        oldest=std::get<3>(*start);
+                        oldest_itr=start;
+                        
+                    }
+                }
+            }
+            m_range_cache.erase(oldest_itr);
+            m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
+            std::get<1>(range_entry),\
+            std::get<2>(range_entry),\
+            gpu_sim_cycle+gpu_tot_sim_cycle,\
+            true));
+
+        }
+
+    }
+
+    bool access_range(addr_type virtual_addr)
+    {
+        virtual_addr &= ~0x1fffff;
+        if (m_range_cache.empty())
+            return false;
+        for (auto entry : m_range_cache)
+        {
+            auto v_addr=std::get<0>(entry);
+            auto sz=std::get<2>(entry);
+            auto valid=std::get<4>(entry);
+            if(valid){
+                auto gap=(virtual_addr-v_addr)<<21;
+                if(gap>=0 and gap < sz){//size=2,gap=1 good, size=2 gap=2 not good!!!
+                    std::get<3>(entry)=gpu_sim_cycle+gpu_tot_sim_cycle;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 };
 
 #endif

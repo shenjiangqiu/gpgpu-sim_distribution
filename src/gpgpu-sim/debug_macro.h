@@ -1,4 +1,9 @@
 
+#ifndef DEBUG_MACRO_H
+#define DEBUG_MACRO_H
+
+
+
 #define TLBDEBUG
 #define FETCHDEBUG
 #define PWDEBUG
@@ -6,6 +11,8 @@
 #define COREQUEUEDEBUG
 #define NEIDEBUG
 #define PTRNGDEBUG
+
+
 #undef TLBDEBUG
 #undef FETCHDEBUG
 #undef PWDEBUG
@@ -13,6 +20,8 @@
 #undef COREQUEUEDEBUG
 #undef NEIDEBUG
 //#undef PTRNGDEBUG
+
+
 #define printdbg(...)                              \
     do                                             \
     {                                              \
@@ -91,3 +100,6 @@ extern unsigned long long gpu_tot_sim_cycle;
 #else
 #define printdbg_NEI(...) void(0)
 #endif
+
+
+#endif//
