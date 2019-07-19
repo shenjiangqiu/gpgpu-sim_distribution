@@ -7,6 +7,8 @@
 #include "gpu-cache.h"
 #include "l1_tlb.h"
 #include "debug_macro.h"
+extern unsigned long long gpu_sim_cycle;
+extern unsigned long long gpu_tot_sim_cycle;
 class abstract_page_table_walker
 {
 public:
@@ -65,6 +67,8 @@ struct page_table_walker_config
     unsigned mshr_size;
     unsigned mshr_max_merge;
     unsigned m_range_size;
+    bool enable_neighborhood;
+    bool enable_range_pt;
     void reg_option(option_parser_t opp);
     void init();
 };
@@ -155,10 +159,10 @@ private:
     unsigned m_range_cache_size;
     std::list<pt_range_cache> m_range_cache;
     //queue for record incoming request
-    std::queue<std::pair<mem_fetch*,unsigned long long>> range_latency_queue;
-    void fill_to_range_cache(mem_fetch *mf)
+    std::queue<std::pair<addr_type,unsigned long long>> range_latency_queue;
+    void fill_to_range_cache(addr_type addr)
     {
-        auto range_entry=global_page_manager->get_range_entry(mf->get_virtual_addr() & ~0x1fffff);
+        auto range_entry=global_page_manager->get_range_entry(addr & ~0x1fffff);
         if(m_range_cache.empty()) {
             m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
             std::get<1>(range_entry),\
@@ -166,15 +170,15 @@ private:
             gpu_sim_cycle+gpu_tot_sim_cycle,\
             true));
         }
-        else if(access_range(mf->get_virtual_addr())){
+        else if(access_range(addr)){//hit
             //it' s in the cache already, do nothing
-        }else if(m_range_cache.size()<m_range_cache_size){
+        }else if(m_range_cache.size()<m_range_cache_size){//miss and add
             m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
             std::get<1>(range_entry),\
             std::get<2>(range_entry),\
             gpu_sim_cycle+gpu_tot_sim_cycle,\
             true));
-        }else{
+        }else{//miss and replace
             //find the oldeast;
             unsigned long long oldest=gpu_sim_cycle+gpu_tot_sim_cycle;
             decltype(m_range_cache.begin()) oldest_itr;

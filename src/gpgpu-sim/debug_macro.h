@@ -19,7 +19,7 @@
 #undef TLBICNTDEBUG
 #undef COREQUEUEDEBUG
 #undef NEIDEBUG
-//#undef PTRNGDEBUG
+#undef PTRNGDEBUG
 
 
 #define printdbg(...)                              \
@@ -98,7 +98,7 @@ extern unsigned long long gpu_tot_sim_cycle;
 #define printdbg_PTRNG(...) \
    printdbg(__VA_ARGS__)
 #else
-#define printdbg_NEI(...) void(0)
+#define printdbg_PTRNG(...) void(0)
 #endif
 
 

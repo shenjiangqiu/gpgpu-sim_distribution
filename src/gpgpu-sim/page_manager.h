@@ -88,7 +88,7 @@ constexpr addr_type code_start = 0x0000f0000000;      //that is get from test.
 constexpr addr_type virtual_start = 0x0000c0000000;
 constexpr addr_type virtual_end = 0x0000F0000000;
 class page_table;
-
+#ifdef PTRNGDEBUG
 #define printdbg_mset_pt(m_pt_set)                                                                    \
     if (m_pt_set.empty())                                                                             \
     {                                                                                                 \
@@ -107,7 +107,10 @@ class page_table;
         }                                                                                             \
         printdbg_PTRNG("\n\n");                                                                       \
     }
-
+#else
+#define printdbg_mset_pt(m_pt_set)                                                                    \
+void(0)
+#endif
 class range_page_table
 {
 public:
