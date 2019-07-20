@@ -71,7 +71,8 @@ std::ostream &operator<<(std::ostream &out, const range_set_compare_by_size &fre
 //stream end
 
 //page_manager start
-page_manager::page_manager(/* args */) : virtual_to_physic(),
+page_manager::page_manager(/* args */) : m_range_page_table(global_bit),
+                                         virtual_to_physic(),
                                          physic_to_virtual(),
                                          virtual_free_ranges(),
                                          virtual_used_ranges(),
@@ -283,12 +284,13 @@ build_all_free_set m_build; //to init all_free_set;
 page_table::page_table(page_table_level level, addr_type physic_addr, page_manager *m_page_manager) : m_page_manager(m_page_manager),
                                                                                                       valid_entries(all_free_set),
                                                                                                       m_level(level),
-                                                                                                      entries(512, nullptr),
-                                                                                                      m_mask(masks[(unsigned int)level]),
+                                                                                                      entries(global_bit==32?31:512, nullptr),
+                                                                                                      m_mask(global_bit==64?masks_64[(unsigned int)level]:masks_32[(unsigned int)level]),
                                                                                                       num_entries(0),
                                                                                                       m_physic_address(physic_addr),
-                                                                                                      offset(12 + 9 * (3 - (unsigned int)level))
+                                                                                                      offset(12 + (global_bit==64? 9:5) * (3 - (unsigned int)level))
 {
+
 }
 void page_table::add_page_table_entry(addr_type virtual_page_number, addr_type physic_page_number)
 {
@@ -304,12 +306,15 @@ void page_table::add_page_table_entry(addr_type virtual_page_number, addr_type p
     }
     else
     {
-        if (entries[index] == nullptr)
+        if (entries[index] == nullptr)//means we must create a new pagetable table!!!now!!
         {
             entries[index] = m_page_manager->creat_new_page_table(get_next_level(m_level));
             entries[index]->add_page_table_entry(virtual_page_number, physic_page_number);
-            if(m_level==page_table_level::L2){
-                m_page_manager->update_range_pt(virtual_page_number &( (unsigned long long )-1 <<21),entries[index]->m_physic_address);
+            if (m_level == page_table_level::L2)
+            {
+                auto mask=((unsigned long long)-1 << m_page_manager->m_range_page_table.get_range_bit_offset());
+                m_page_manager->update_range_pt(virtual_page_number & mask,
+                                                entries[index]->m_physic_address);
             }
             return;
         }

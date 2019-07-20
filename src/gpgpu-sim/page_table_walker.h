@@ -7,8 +7,7 @@
 #include "gpu-cache.h"
 #include "l1_tlb.h"
 #include "debug_macro.h"
-extern unsigned long long gpu_sim_cycle;
-extern unsigned long long gpu_tot_sim_cycle;
+
 class abstract_page_table_walker
 {
 public:
@@ -69,12 +68,16 @@ struct page_table_walker_config
     unsigned m_range_size;
     bool enable_neighborhood;
     bool enable_range_pt;
+    bool enable_32_bit;
     void reg_option(option_parser_t opp);
     void init();
 };
 //static constexpr addr_type neighbor_masks[4] = {0xFF8000000000, 0x7FC0000000, 0x3FE00000, 0x1FF000};
-static constexpr addr_type masks_accumulate[4] = {0xFF8000000000, 0xFFFFC0000000, 0xFFFFFFE00000, 0xFFFFFFFFF000};
-static constexpr unsigned mask_offset[4] = {39, 30, 21, 12};
+
+static constexpr unsigned long long masks_accumulate_64[4] = {0xFF8000000000, 0xFFFFC0000000, 0xFFFFFFE00000, 0xFFFFFFFFF000};
+static constexpr unsigned long long masks_accumulate_32[4]={0xF8000000,0xFFC00000,0xFFFE0000,0xFFFFF000};
+static constexpr unsigned mask_offset_64[4] = {39, 30, 21, 12};
+static constexpr unsigned mask_offset_32[4] = {27, 22, 17, 12};
 
 class real_page_table_walker : public abstract_page_table_walker
 {
@@ -102,6 +105,9 @@ public:
         fprintf(file, "pw cache hit: %llu\n", hit_times);
         fprintf(file, "pw cache miss: %llu\n", miss_times);
         fprintf(file, "pw cache resfail: %llu\n", resfail_times);
+        fprintf(file, "range cache access: %llu\n", range_cache_access);
+        fprintf(file, "range cache hit: %llu\n", range_cache_hit);
+        fprintf(file, "range cache miss: %llu\n", range_cache_miss);
     }
     virtual void flush() override
     {
@@ -129,13 +135,23 @@ private:
     std::queue<mem_fetch *> icnt_response_buffer; //recv from icnt
     std::list<std::tuple<bool, mem_fetch *, bool, page_table_level, addr_type>> waiting_buffer;
     //0:coaled  1:mf  2:wating?  3:level  4:addr
-
-    static bool is_neighbor(const mem_fetch *origin, const mem_fetch *target, page_table_level the_level)
+    
+    static bool is_neighbor(const mem_fetch *origin, const mem_fetch *target, page_table_level the_level,unsigned addr_space)
     {
         printdbg_NEI("try to judge if it's neiborhood\n");
         auto num_leve = (unsigned)the_level;
-        auto addr_origin = (origin->get_virtual_addr() & masks_accumulate[num_leve]) >> mask_offset[num_leve];
-        auto addr_target = (target->get_virtual_addr() & masks_accumulate[num_leve]) >> mask_offset[num_leve];
+        addr_type addr_origin;
+        addr_type addr_target;
+        if (addr_space == 64)
+        {
+            addr_origin = (origin->get_virtual_addr() & masks_accumulate_64[num_leve]) >> mask_offset_64[num_leve];
+            addr_target = (target->get_virtual_addr() & masks_accumulate_64[num_leve]) >> mask_offset_64[num_leve];
+        }
+        else
+        {
+            addr_origin = (origin->get_virtual_addr() & masks_accumulate_32[num_leve]) >> mask_offset_32[num_leve];
+            addr_target = (target->get_virtual_addr() & masks_accumulate_32[num_leve]) >> mask_offset_32[num_leve];
+        }
         if ((addr_origin ^ addr_target) <= 15ull) //128 byte cache line contains 8 entries of pt
         {
             printdbg_NEI("YES:It is:addr 1: %llx,2:%llx,level:%u\n", origin->get_virtual_addr(), target->get_virtual_addr(), 4-(unsigned)the_level);
@@ -162,9 +178,9 @@ private:
     std::queue<std::pair<addr_type,unsigned long long>> range_latency_queue;
     void fill_to_range_cache(addr_type addr)
     {
-        auto range_entry=global_page_manager->get_range_entry(addr & ~0x1fffff);
+        auto range_entry=global_page_manager->get_range_entry(addr & ~(global_bit==32?0x1ffff: 0x1fffff));//different mask
         if(m_range_cache.empty()) {
-            m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
+            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),\
             std::get<1>(range_entry),\
             std::get<2>(range_entry),\
             gpu_sim_cycle+gpu_tot_sim_cycle,\
@@ -173,7 +189,7 @@ private:
         else if(access_range(addr)){//hit
             //it' s in the cache already, do nothing
         }else if(m_range_cache.size()<m_range_cache_size){//miss and add
-            m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
+            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),\
             std::get<1>(range_entry),\
             std::get<2>(range_entry),\
             gpu_sim_cycle+gpu_tot_sim_cycle,\
@@ -204,24 +220,32 @@ private:
 
     bool access_range(addr_type virtual_addr)
     {
-        virtual_addr &= ~0x1fffff;
-        if (m_range_cache.empty())
+        range_cache_access++;
+        virtual_addr &= ~(global_bit==32?0x1ffff: 0x1fffff);
+        if (m_range_cache.empty()){
+            range_cache_miss++;
             return false;
+        }
         for (auto entry : m_range_cache)
         {
             auto v_addr=std::get<0>(entry);
             auto sz=std::get<2>(entry);
             auto valid=std::get<4>(entry);
             if(valid){
-                auto gap=(virtual_addr-v_addr)<<21;
+                auto gap=(virtual_addr-v_addr)<<(global_bit==32?17:21);
                 if(gap>=0 and gap < sz){//size=2,gap=1 good, size=2 gap=2 not good!!!
                     std::get<3>(entry)=gpu_sim_cycle+gpu_tot_sim_cycle;
+                    range_cache_hit++;
                     return true;
                 }
             }
         }
         return false;
     }
+
+    unsigned long long range_cache_access=0;
+    unsigned long long range_cache_hit=0;
+    unsigned long long range_cache_miss=0;
 };
 
 #endif

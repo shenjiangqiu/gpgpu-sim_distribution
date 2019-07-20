@@ -1,6 +1,8 @@
 #ifndef PAGE_MANAGER_H
 #define PAGE_MANAGER_H
 #include "debug_macro.h"
+// #include"page_table_walker.h"
+#include"extern_var.h"
 #include <bitset>
 #include <map>
 #include <set>
@@ -87,6 +89,8 @@ constexpr addr_type pagetable_end = 0x000000FFFFFF;   //
 constexpr addr_type code_start = 0x0000f0000000;      //that is get from test.
 constexpr addr_type virtual_start = 0x0000c0000000;
 constexpr addr_type virtual_end = 0x0000F0000000;
+
+
 class page_table;
 #ifdef PTRNGDEBUG
 #define printdbg_mset_pt(m_pt_set)                                                                    \
@@ -111,17 +115,21 @@ class page_table;
 #define printdbg_mset_pt(m_pt_set)                                                                    \
 void(0)
 #endif
+
 class range_page_table
 {
 public:
+    range_page_table(unsigned bit):m_bit(bit){}
+    range_page_table()=delete;
+
     //every time we add a new pagetable we need to call this function,option:0:add,1 del
     void update(addr_type virtual_page_addr, addr_type pt_physic_addr, unsigned option = 0)
     {
         printdbg_PTRNG("start to update: virtual_page_addr:%llx, physic_page_addr:%llx,v_no:%llx,p_no:%llx\n",
                        /* vaddr */ virtual_page_addr,
                        /* pt_paddr */ pt_physic_addr,
-                       /* l2 number */ virtual_page_addr >> 21,
-                       /* pt_physic_number */ pt_physic_addr >> 12);
+                       /* l2 number */ virtual_page_addr >> get_range_bit_offset(),
+                       /* pt_physic_number */ pt_physic_addr >> get_range_bit_pt_offset());
         printdbg_PTRNG("before update:\n");
         printdbg_mset_pt(m_pt_set);
         auto range_to_insert = std::make_tuple(virtual_page_addr, pt_physic_addr, 1);
@@ -176,7 +184,7 @@ public:
     }
     bool is_in_range(addr_type virtual_addr)
     {
-        assert((virtual_addr & 0x1FFFFF )== 0);
+        assert((virtual_addr & get_range_bit_mask() )== 0);
         auto entry = find_the_less_or_equal_range(std::make_tuple(virtual_addr, 0, 0));
         if (entry == m_pt_set.end())
         {
@@ -201,8 +209,19 @@ public:
         auto entry = find_the_less_or_equal_range(std::make_tuple(virtual_addr, 0, 0));
         return *entry;
     }
+    
+     addr_type get_range_bit_mask(){
+        return m_bit==64?0x1FFFFF:0x1FFFF;
+    }
+    unsigned get_range_bit_offset(){
+        return m_bit==64?21:17;
+    }
+    unsigned get_range_bit_pt_offset(){
+        return m_bit==64?12:8;
+    }
 
 private:
+    unsigned m_bit;
     pt_range_buffer_set m_pt_set;
     void append_existing_entry_and_merge(decltype(m_pt_set.begin()) to_append)
     {
@@ -265,12 +284,12 @@ private:
     }
     unsigned get_page_gap(const page_table_range_buffer_entry &from, const page_table_range_buffer_entry &to)
     {
-        return (std::get<0>(to) - std::get<0>(from)) >> 21;
+        return (std::get<0>(to) - std::get<0>(from)) >> get_range_bit_offset();
     }
 
     unsigned get_pt_addr_gap(const page_table_range_buffer_entry &from, const page_table_range_buffer_entry &to)
     {
-        return (std::get<1>(to) - std::get<1>(from)) >> 12;
+        return (std::get<1>(to) - std::get<1>(from)) >> get_range_bit_pt_offset();
     }
     //return 0 mean need to append and connect, return 1 means inside and should throw, return 2 means we need a new entry and connect,3 means it's not belong to that range!;
     unsigned the_position_of_the_entry(decltype(m_pt_set.begin()) existing_entry, const page_table_range_buffer_entry &to_insert)
@@ -305,6 +324,7 @@ class page_manager
 {
 
 public:
+
     addr_type translate(addr_type virtual_addr);
     addr_type get_pagetable_physic_addr(addr_type virtual_addr, page_table_level level);
     page_manager(/* args */);
@@ -323,30 +343,35 @@ public:
     //return one free physic page address in page-table space;
     addr_type get_valid_physic_page_page_table()
     {
-
+        auto size=global_bit==32?256u:4096u;
         if (page_table_ranges_free.empty())
         { //run out of free page
             throw std::runtime_error("no physic page exist");
         }
         auto begin_page_found_itr = page_table_ranges_free.begin(); //find the first free page
         auto begin_page_found = *begin_page_found_itr;              //this is copy. so original can be erase.
-        if (begin_page_found.size() == 4096)
+        if (begin_page_found.size() == size)
         { //the free page can be delete with out more opration
             page_table_ranges_free.erase(begin_page_found_itr);
         }
         else
         {
             auto replace_page = begin_page_found;
-            replace_page.set_start(begin_page_found.get_start() + 4096);
+            replace_page.set_start(begin_page_found.get_start() + size);
             page_table_ranges_free.erase(begin_page_found_itr);
             page_table_ranges_free.insert(replace_page);
         }
 
         //now we set used_range;
         auto result_page = range(begin_page_found);
-        result_page.set_end(result_page.get_start() + 4096); //the real page to insert
+        result_page.set_end(result_page.get_start() + size); //the real page to insert
 
         auto used_pre = page_table_ranges_used.lower_bound(result_page);
+        if(used_pre!=page_table_ranges_used.begin()){
+            used_pre=std::prev(used_pre);
+        }else{
+            used_pre=page_table_ranges_used.end();
+        }
         auto used_after = page_table_ranges_used.upper_bound(result_page);
         bool extend = false;
         if (used_pre != page_table_ranges_used.end())
@@ -387,9 +412,9 @@ public:
     {
         return m_range_page_table.get_range_entry(virtual_addr);
     }
+    range_page_table m_range_page_table;
 
 private:
-    range_page_table m_range_page_table;
     unsigned pt_range_buffer_size = 10;
 
     addr_map virtual_to_physic; //all L1 entries
@@ -411,11 +436,16 @@ private:
     /* data */
     page_table *root; //that can be used to access all the page table,it cantains 512 entries and each entry is a pointer to next level pagetable
 };
-constexpr addr_type masks[] = {
+constexpr addr_type masks_64[] = {
     0xFF8000000000,
     0x007FC0000000,
     0x00003FE00000,
     0x0000001FF000};
+constexpr addr_type masks_32[] = {
+    0xF8000000,
+    0x07C00000,
+    0x003E0000,
+    0x0001F000};
 
 class page_table
 {
