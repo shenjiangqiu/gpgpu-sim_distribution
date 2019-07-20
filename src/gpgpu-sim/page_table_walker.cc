@@ -188,11 +188,11 @@ void real_page_table_walker::cycle()
 
     if (!range_latency_queue.empty())
     {
-        printdbg_PTRNG("\n\nlatency queue is not empty!!\n\n\n");
+        //printdbg_PTRNG("\n\nlatency queue is not empty!!\n\n\n");
 
         if (range_latency_queue.front().second <= gpu_sim_cycle + gpu_tot_sim_cycle)
         {
-            printdbg_PTRNG("start to fill to range_latency_cache!\n\n");
+            //printdbg_PTRNG("start to fill to range_latency_cache!\n\n");
             fill_to_range_cache(range_latency_queue.front().first);
             range_latency_queue.pop();
         }

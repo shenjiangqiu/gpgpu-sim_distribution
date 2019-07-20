@@ -284,7 +284,7 @@ build_all_free_set m_build; //to init all_free_set;
 page_table::page_table(page_table_level level, addr_type physic_addr, page_manager *m_page_manager) : m_page_manager(m_page_manager),
                                                                                                       valid_entries(all_free_set),
                                                                                                       m_level(level),
-                                                                                                      entries(global_bit==32?31:512, nullptr),
+                                                                                                      entries(global_bit==32?32:512, nullptr),
                                                                                                       m_mask(global_bit==64?masks_64[(unsigned int)level]:masks_32[(unsigned int)level]),
                                                                                                       num_entries(0),
                                                                                                       m_physic_address(physic_addr),

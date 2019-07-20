@@ -19,7 +19,7 @@
 #undef TLBICNTDEBUG
 #undef COREQUEUEDEBUG
 #undef NEIDEBUG
-#undef PTRNGDEBUG
+// #undef PTRNGDEBUG
 
 
 #define printdbg(...)                              \

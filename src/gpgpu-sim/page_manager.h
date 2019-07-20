@@ -106,8 +106,8 @@ class page_table;
                            std::get<0>(entry),                                                        \
                            std::get<1>(entry),                                                        \
                            std::get<2>(entry),                                                        \
-                           std::get<0>(entry) >> 21,                                                  \
-                           std::get<1>(entry) >> 12);                                                 \
+                           std::get<0>(entry) >> (global_bit==64?21ull:17ull),                                                  \
+                           std::get<1>(entry) >> (global_bit==64?12ull:8ull));                                                 \
         }                                                                                             \
         printdbg_PTRNG("\n\n");                                                                       \
     }
