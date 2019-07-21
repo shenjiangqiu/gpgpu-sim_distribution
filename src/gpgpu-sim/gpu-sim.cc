@@ -1121,7 +1121,8 @@ void gpgpu_sim::clear_executed_kernel_info()
 void gpgpu_sim::gpu_print_stat() 
 {  
    FILE *statfout = stdout; 
-   FILE *fileout=fopen("gpgpusim_output.txt","w");
+   //gpgpusim_output.txt
+   FILE *fileout=stdout;
    m_l2_tlb.print_stat(fileout);
    for(int i=0;i<m_config.num_cluster();i++){
 
