@@ -240,6 +240,7 @@ private:
                 }
             }
         }
+        range_cache_miss++;
         return false;
     }
 
