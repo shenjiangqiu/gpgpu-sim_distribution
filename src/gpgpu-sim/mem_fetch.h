@@ -66,6 +66,9 @@ public:
     #endif
     unsigned icnt_from;
     unsigned icnt_to;
+
+    int mem_important_level=-1;
+    int trans_important_level=-1;
     mem_fetch( const mem_access_t &access, 
                const warp_inst_t *inst,
                unsigned ctrl_size, 

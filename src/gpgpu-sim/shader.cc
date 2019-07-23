@@ -58,6 +58,8 @@
 #include "l2_tlb.h"
 /////////////////////////////////////////////////////////////////////////////
 
+
+
 std::list<unsigned> shader_core_ctx::get_regs_written(const inst_t &fvt) const
 {
     std::list<unsigned> result;
@@ -82,6 +84,7 @@ shader_core_ctx::shader_core_ctx(class gpgpu_sim *gpu,
       m_barriers(this, config->max_warps_per_shader, config->max_cta_per_core, config->max_barriers_per_cta, config->warp_size),
       m_active_warps(0), m_dynamic_warp_id(0)
 {
+
     global_n_cores = config->n_simt_clusters;
     m_cluster = cluster;
     m_config = config;
@@ -874,6 +877,8 @@ void shader_core_ctx::fetch() //redesign for tlb/translate
                                                   m_sid,
                                                   m_tpc,
                                                   m_memory_config);
+                    mf->mem_important_level=1;
+                    mf->trans_important_level=1;                        
 
                     //1, firt to produce tlb cache access
                     auto result = m_l1I_tlb->access(mf, gpu_sim_cycle + gpu_tot_sim_cycle); //access tlb cache//TODO that will insert mf in outgoing set,remember to erase somewhere!
@@ -1008,6 +1013,18 @@ void shader_core_ctx::func_exec_inst(warp_inst_t &inst)
     if (inst.is_load() || inst.is_store())
     {
         inst.generate_mem_accesses();
+        if (((inst.space.get_type() != global_space) &&
+             (inst.space.get_type() != local_space) &&
+             (inst.space.get_type() != param_space_local)))
+        {
+            return;
+        }
+        else
+        {
+            inst.set_access_number();
+            global_mem_div_count[inst.mem_requst_number-1]++;
+            global_trans_div_count[inst.trans_requst_number-1]++;
+        }
         //inst.print_m_accessq();
     }
 }
@@ -2636,6 +2653,22 @@ bool ldst_unit::tlb_cycle(warp_inst_t &inst, mem_stage_stall_type &stall_reason,
     //const mem_access_t &access = inst.accessq_back();
 
     mem_fetch *mf = m_mf_allocator->alloc(inst, inst.accessq_back());
+    if (inst.space.get_type() == global_space)
+    {
+        mf->mem_important_level = inst.mem_requst_number;
+        mf->trans_important_level = inst.trans_requst_number;
+    }
+    else
+    {
+        mf->mem_important_level = 1;
+        mf->trans_important_level = 1;
+    }
+    assert(mf->mem_important_level >0 && mf->trans_important_level>0);
+    assert(mf->mem_important_level <=32 && mf->trans_important_level<=32);
+    printdbg_IMPC("mem acc:%u,trans:%lu\n",mf->mem_important_level,mf->trans_important_level);
+    if(mf->trans_important_level!=mf->mem_important_level ||mf->trans_important_level!=32 ){
+        printdbg_IMPC("______!!!______!!!_____mem acc:%u,trans:%lu different!\n");
+    }
     //auto physicaddr=mf->physic_addr;
     stall_reason=NO_RC_FAIL;
     access_type=G_MEM_LD;

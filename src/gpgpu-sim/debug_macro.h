@@ -11,6 +11,7 @@
 #define COREQUEUEDEBUG
 #define NEIDEBUG
 #define PTRNGDEBUG
+#define IMPCDEBUG
 
 
 #undef TLBDEBUG
@@ -20,6 +21,7 @@
 #undef COREQUEUEDEBUG
 #undef NEIDEBUG
 #undef PTRNGDEBUG
+#undef IMPCDEBUG
 
 
 #define printdbg(...)                              \
@@ -113,6 +115,18 @@ extern unsigned long long gpu_tot_sim_cycle;
 #else
     #define PRINTRNG_CACHE(cache)  void(0)
 #endif
+//
+#ifdef IMPCDEBUG
+extern unsigned long long gpu_sim_cycle;
+extern unsigned long long gpu_tot_sim_cycle;
+#define printdbg_IMPC(...) \
+   printdbg(__VA_ARGS__)
+#else
+#define printdbg_IMPC(...) void(0)
+#endif
+
+// IMPCDEBUG
 
 
 #endif//
+

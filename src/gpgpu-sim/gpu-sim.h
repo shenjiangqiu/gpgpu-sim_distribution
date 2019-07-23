@@ -63,6 +63,8 @@
 #define DUMPLOG 333
 
 
+extern unsigned long long global_mem_div_count[32];
+extern unsigned long long global_trans_div_count[32];
 
 
 

@@ -81,6 +81,8 @@ class  gpgpu_sim_wrapper {};
 #include"debug_macro.h"
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
+unsigned long long global_mem_div_count[32];
+unsigned long long global_trans_div_count[32];
 
 
 bool g_interactive_debugger_enabled=false;
@@ -724,6 +726,10 @@ void set_ptx_warp_size(const struct core_config * warp_size);
 gpgpu_sim::gpgpu_sim( const gpgpu_sim_config &config ) 
     : gpgpu_t(config), m_config(config),m_l2_tlb(config.m_l2_tlb_config)
 { 
+   for(unsigned i=0;i<32;i++){
+      global_mem_div_count[i]=0;
+      global_trans_div_count[i]=0;
+   }
     m_shader_config = &m_config.m_shader_config;
     m_memory_config = &m_config.m_memory_config;
     set_ptx_warp_size(m_shader_config);
@@ -1120,10 +1126,19 @@ void gpgpu_sim::clear_executed_kernel_info()
 }
 void gpgpu_sim::gpu_print_stat() 
 {  
+
    FILE *statfout = stdout; 
    //gpgpusim_output.txt
    FILE *fileout=stdout;
    m_l2_tlb.print_stat(fileout);
+   for(unsigned i=0;i<32;i++){
+      fprintf(statfout,"sjq_mem_div_%u:%llu\n",i+1,global_mem_div_count[i]);
+   }
+   fprintf(statfout,"\n\n");
+   for(unsigned i=0;i<32;i++){
+      fprintf(statfout,"sjq_trans_div_%u:%llu\n",i+1,global_trans_div_count[i]);
+   }
+
    for(int i=0;i<m_config.num_cluster();i++){
 
       for(int j=0;j<m_config.m_shader_config.n_simt_cores_per_cluster;j++){

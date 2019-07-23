@@ -948,6 +948,16 @@ const unsigned MAX_ACCESSES_PER_INSN_PER_THREAD = 8;
 
 class warp_inst_t: public inst_t {
 public:
+    int mem_requst_number=-1;
+    int trans_requst_number=-1;
+    void set_access_number(){
+        mem_requst_number=m_accessq.size();
+        std::set<new_addr_type> page_set;
+        for(auto ac:m_accessq){
+            page_set.insert(ac.get_addr()>>12);
+        }
+        trans_requst_number=page_set.size();
+    }
     static unsigned _id;
     // constructors
     unsigned _m_id;
