@@ -53,7 +53,7 @@ void l2_tlb_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-l2tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "16");
     option_parser_register(opp, "-l2tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the mshr size", "64");         //the number of different addresses
     option_parser_register(opp, "-l2tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max merge size", "32"); //the number of cores
-    option_parser_register(opp, "-l2tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the response queue size 0=unlimited", "40");
+    option_parser_register(opp, "-l2tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the response queue size 0=unlimited", "0");
     option_parser_register(opp, "-l2tlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the miss queue size 0=unlimited", "0");
     option_parser_register(opp, "-l2tlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the page size", "4096");
     option_parser_register(opp, "-l2tlb_pw_size", option_dtype::OPT_UINT32, &m_pw_size, "the size of pw size", "16");
@@ -253,7 +253,7 @@ void l2_tlb::cycle()
     {                                                                                                                                                                         //push all the ready access to response Queue
         printdbg_tlb("send m_mshr next access to m response queue\n");
         m_response_queue.push_back(m_mshrs->next_access());
-        assert(m_response_queue.size() < 100);
+//        assert(m_response_queue.size() < 100);
         printdbg_tlb("the mf is:%llX\n", m_response_queue.back()->get_virtual_addr());
     }
     while (m_page_table_walker->ready())
