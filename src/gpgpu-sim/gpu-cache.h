@@ -869,7 +869,7 @@ public:
     /// Checks if there is a pending request to the lower memory level already
     bool probe( new_addr_type block_addr ) const;
     /// Checks if there is space for tracking a new memory access
-    bool full( new_addr_type block_addr ) const;
+    bool full( new_addr_type block_addr ,unsigned & reason) const;
     /// Add or merge this access
     template <int N = 0>//I add this template is to test the access behavior is correct,
     void add(new_addr_type block_addr, mem_fetch *mf)

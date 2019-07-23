@@ -69,6 +69,7 @@ public:
 
     int mem_important_level=-1;
     int trans_important_level=-1;
+    // unsigned long long send_timestamp=0;
     mem_fetch( const mem_access_t &access, 
                const warp_inst_t *inst,
                unsigned ctrl_size, 

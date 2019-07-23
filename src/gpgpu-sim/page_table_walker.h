@@ -8,8 +8,6 @@
 #include "l1_tlb.h"
 #include "debug_macro.h"
 
-
-
 class abstract_page_table_walker
 {
 public:
@@ -77,7 +75,7 @@ struct page_table_walker_config
 //static constexpr addr_type neighbor_masks[4] = {0xFF8000000000, 0x7FC0000000, 0x3FE00000, 0x1FF000};
 
 static constexpr unsigned long long masks_accumulate_64[4] = {0xFF8000000000, 0xFFFFC0000000, 0xFFFFFFE00000, 0xFFFFFFFFF000};
-static constexpr unsigned long long masks_accumulate_32[4]={0xF8000000,0xFFC00000,0xFFFE0000,0xFFFFF000};
+static constexpr unsigned long long masks_accumulate_32[4] = {0xF8000000, 0xFFC00000, 0xFFFE0000, 0xFFFFF000};
 static constexpr unsigned mask_offset_64[4] = {39, 30, 21, 12};
 static constexpr unsigned mask_offset_32[4] = {27, 22, 17, 12};
 
@@ -103,29 +101,37 @@ public:
     }
     virtual void print_stat(FILE *file) const override
     {
-        fprintf(file, "pw cache access: %llu\n", access_times);
-        fprintf(file, "pw cache hit: %llu\n", hit_times);
-        fprintf(file, "pw cache miss: %llu\n", miss_times);
-        fprintf(file, "pw cache resfail: %llu\n", resfail_times);
+
+        fprintf(file, "pwc_access: %llu\n", access_times);
+        fprintf(file, "pwc_hit: %llu\n", hit_times);
+        fprintf(file, "pwc_miss: %llu\n", miss_times);
+        fprintf(file, "pwc_resfail_all_res: %llu\n", resfail_all_res_times);
+        fprintf(file, "pwc_resfail_entry_full: %llu\n", resfail_mshr_entry_full_times);
+        fprintf(file, "pwc_resfail_merge: %llu\n", resfail_mshr_merge_full_times);
+        fprintf(file, "pwc_resfail_missq: %llu\n", resfail_mshr_missq_full_times);
+
         fprintf(file, "range cache access: %llu\n", range_cache_access);
         fprintf(file, "range cache hit: %llu\n", range_cache_hit);
         fprintf(file, "range cache miss: %llu\n", range_cache_miss);
     }
     virtual void flush() override
     {
-        if(working_walker.size()!=0 or waiting_buffer.size()!=0){
+        if (working_walker.size() != 0 or waiting_buffer.size() != 0)
+        {
             throw "error,when kernel end, this should be empty!";
         }
-        for(auto blk:m_tag_arrays){
-            blk->set_status(INVALID,mem_access_sector_mask_t());
+        for (auto blk : m_tag_arrays)
+        {
+            blk->set_status(INVALID, mem_access_sector_mask_t());
         }
-        
     }
 
 private:
     void fill(mem_fetch *mf); //fill pw cache;
     page_table_walker_config m_config;
-    std::vector<cache_block_t*> m_tag_arrays;
+    std::vector<std::list<cache_block_t *>> new_tag_arrays; //new algorithms to replace lru!
+
+    std::vector<cache_block_t *> m_tag_arrays;
     mshr_table *m_mshr;
     //std::vector<std::tuple<addr_type,unsigned>> working_walker; old design
 
@@ -137,8 +143,8 @@ private:
     std::queue<mem_fetch *> icnt_response_buffer; //recv from icnt
     std::list<std::tuple<bool, mem_fetch *, bool, page_table_level, addr_type>> waiting_buffer;
     //0:coaled  1:mf  2:wating?  3:level  4:addr
-    
-    static bool is_neighbor(const mem_fetch *origin, const mem_fetch *target, page_table_level the_level,unsigned addr_space)
+
+    static bool is_neighbor(const mem_fetch *origin, const mem_fetch *target, page_table_level the_level, unsigned addr_space)
     {
         printdbg_NEI("try to judge if it's neiborhood\n");
         auto num_leve = (unsigned)the_level;
@@ -156,7 +162,7 @@ private:
         }
         if ((addr_origin ^ addr_target) <= 15ull) //128 byte cache line contains 8 entries of pt
         {
-            printdbg_NEI("YES:It is:addr 1: %llx,2:%llx,level:%u\n", origin->get_virtual_addr(), target->get_virtual_addr(), 4-(unsigned)the_level);
+            printdbg_NEI("YES:It is:addr 1: %llx,2:%llx,level:%u\n", origin->get_virtual_addr(), target->get_virtual_addr(), 4 - (unsigned)the_level);
 
             return true;
         }
@@ -168,59 +174,61 @@ private:
     }
 
     using ull = unsigned long long;
-    ull access_times;
-    ull hit_times;
-    ull miss_times;
-    ull resfail_times;
     // std::get<0>: vir_addr;std::get<1>: pt_physic_addr,std::get<2>: size,std::get<3>: last access time;//allocate on fill
-    using pt_range_cache=std::tuple<addr_type,addr_type,unsigned,unsigned long long ,bool>;
+    using pt_range_cache = std::tuple<addr_type, addr_type, unsigned, unsigned long long, bool>;
     unsigned m_range_cache_size;
     std::list<pt_range_cache> m_range_cache;
     //queue for record incoming request
-    std::queue<std::pair<addr_type,unsigned long long>> range_latency_queue;
+    std::queue<std::pair<addr_type, unsigned long long>> range_latency_queue;
     void fill_to_range_cache(addr_type addr)
     {
-        auto range_entry=global_page_manager->get_range_entry(addr & ~(global_bit==32?0x1ffff: 0x1fffff));//different mask
-        if(m_range_cache.empty()) {
-            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),\
-            std::get<1>(range_entry),\
-            std::get<2>(range_entry),\
-            gpu_sim_cycle+gpu_tot_sim_cycle,\
-            true));
+        auto range_entry = global_page_manager->get_range_entry(addr & ~(global_bit == 32 ? 0x1ffff : 0x1fffff)); //different mask
+        if (m_range_cache.empty())
+        {
+            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),
+                                                    std::get<1>(range_entry),
+                                                    std::get<2>(range_entry),
+                                                    gpu_sim_cycle + gpu_tot_sim_cycle,
+                                                    true));
         }
-        else if(access_range<0>(addr)){//hit
+        else if (access_range<0>(addr))
+        { //hit
             //it' s in the cache already, do nothing
-        }else if(m_range_cache.size()<m_range_cache_size){//miss and add
-            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),\
-            std::get<1>(range_entry),\
-            std::get<2>(range_entry),\
-            gpu_sim_cycle+gpu_tot_sim_cycle,\
-            true));
-        }else{//miss and replace
+        }
+        else if (m_range_cache.size() < m_range_cache_size)
+        { //miss and add
+            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),
+                                                    std::get<1>(range_entry),
+                                                    std::get<2>(range_entry),
+                                                    gpu_sim_cycle + gpu_tot_sim_cycle,
+                                                    true));
+        }
+        else
+        { //miss and replace
             //find the oldeast;
-            unsigned long long oldest=gpu_sim_cycle+gpu_tot_sim_cycle;
+            unsigned long long oldest = gpu_sim_cycle + gpu_tot_sim_cycle;
             decltype(m_range_cache.begin()) oldest_itr;
-            for(auto start=m_range_cache.begin();start!=m_range_cache.end();start++){
-                if(std::get<4>(*start)){
-                    if(std::get<3>(*start)<oldest){
-                        oldest=std::get<3>(*start);
-                        oldest_itr=start;
-                        
+            for (auto start = m_range_cache.begin(); start != m_range_cache.end(); start++)
+            {
+                if (std::get<4>(*start))
+                {
+                    if (std::get<3>(*start) < oldest)
+                    {
+                        oldest = std::get<3>(*start);
+                        oldest_itr = start;
                     }
                 }
             }
             m_range_cache.erase(oldest_itr);
 
-            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),\
-            std::get<1>(range_entry),\
-            std::get<2>(range_entry),\
-            gpu_sim_cycle+gpu_tot_sim_cycle,\
-            true));
-
+            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),
+                                                    std::get<1>(range_entry),
+                                                    std::get<2>(range_entry),
+                                                    gpu_sim_cycle + gpu_tot_sim_cycle,
+                                                    true));
         }
-
     }
-    template<int N>
+    template <int N>
     bool access_range(addr_type virtual_addr)
     {
         ///range_cache_access++;
@@ -233,8 +241,9 @@ private:
             printdbg_PTRNG("\n\n-----start to access range_cache, It's real!!,!!!----------------\n");
         }
 
-        virtual_addr &= ~(global_bit==32?0x1ffff: 0x1fffff);
-        if (m_range_cache.empty()){
+        virtual_addr &= ~(global_bit == 32 ? 0x1ffff : 0x1fffff);
+        if (m_range_cache.empty())
+        {
             //if(N==0)
             printdbg_PTRNG("access but range empty!\n");
             //range_cache_miss++;
@@ -249,15 +258,15 @@ private:
 
             return false;
         }
-        
-        printdbg_PTRNG("current cache size:%lu __ access good,addr:%llx,v_addr,index:%llu\n ",m_range_cache.size(),virtual_addr,virtual_addr>>(global_bit==32?17:21));
-        
+
+        printdbg_PTRNG("current cache size:%lu __ access good,addr:%llx,v_addr,index:%llu\n ", m_range_cache.size(), virtual_addr, virtual_addr >> (global_bit == 32 ? 17 : 21));
+
         PRINTRNG_CACHE(m_range_cache);
         for (auto entry : m_range_cache)
         {
             printdbg_PTRNG("acces here!\n");
-            auto v_addr=std::get<0>(entry);
-            auto sz=std::get<2>(entry);
+            auto v_addr = std::get<0>(entry);
+            auto sz = std::get<2>(entry);
             auto valid = std::get<4>(entry);
             if (valid)
             {
@@ -291,9 +300,18 @@ private:
         return false;
     }
 
-    unsigned long long range_cache_access=0;
-    unsigned long long range_cache_hit=0;
-    unsigned long long range_cache_miss=0;
+    unsigned long long range_cache_access = 0;
+    unsigned long long range_cache_hit = 0;
+    unsigned long long range_cache_miss = 0;
+
+    ull access_times = 0;
+    ull hit_times = 0;
+    ull hit_reserved_times = 0;
+    ull miss_times = 0;
+    ull resfail_mshr_entry_full_times = 0;
+    ull resfail_mshr_merge_full_times = 0;
+    ull resfail_mshr_missq_full_times = 0;
+    ull resfail_all_res_times = 0;
 };
 
 #endif

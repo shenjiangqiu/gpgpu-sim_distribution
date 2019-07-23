@@ -24,8 +24,7 @@ l2_tlb::l2_tlb(l2_tlb_config config) : m_config(config),
                                        m_tag_arrays(m_config.n_sets * m_config.n_associate), //null shared point
                                        access_times(0),
                                        hit_times(0),
-                                       miss_times(0),
-                                       resfail_times(0)
+                                       miss_times(0)
 {
     for (unsigned i = 0; i < m_config.n_sets * m_config.n_associate; i++)
     {
@@ -50,10 +49,10 @@ void l2_tlb_config::init()
 void l2_tlb_config::reg_option(option_parser_t opp)
 {
     m_page_table_walker_config.reg_option(opp);
-    option_parser_register(opp, "-l2tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l2 tlb", "32");
+    option_parser_register(opp, "-l2tlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l2 tlb", "512");
     option_parser_register(opp, "-l2tlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "16");
-    option_parser_register(opp, "-l2tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the mshr size", "32");
-    option_parser_register(opp, "-l2tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max merge size", "32");
+    option_parser_register(opp, "-l2tlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the mshr size", "64");         //the number of different addresses
+    option_parser_register(opp, "-l2tlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max merge size", "32"); //the number of cores
     option_parser_register(opp, "-l2tlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the response queue size 0=unlimited", "40");
     option_parser_register(opp, "-l2tlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the miss queue size 0=unlimited", "0");
     option_parser_register(opp, "-l2tlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the page size", "4096");
@@ -139,10 +138,11 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                 switch (status)
                 {
                 case RESERVED:
-                    if (m_mshrs->full(block_addr))
+                    unsigned reason;
+                    if (m_mshrs->full(block_addr, reason))
                     {
                         printdbg_tlb("reserved! and mshr full\n");
-                        resfail_times++;
+                        reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
                         return tlb_result::resfail;
                     }
                     else
@@ -150,7 +150,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                         printdbg_tlb("hit reserved! add to mfshr\n");
                         m_mshrs->add<2>(block_addr, mf); //not new
                         (*start)->set_last_access_time(time, mask);
-                        miss_times++;
+                        hit_reserved_times++;
                         return tlb_result::hit_reserved;
                     }
                     break;
@@ -160,8 +160,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
                     printdbg_tlb("push to response queu: mf:%llX\n", mf->get_virtual_addr());
                     if (m_config.response_queue_size != 0 and m_config.response_queue_size <= m_response_queue.size())
                     {
-                        resfail_times++;
-                        return tlb_result::resfail;
+                        assert(0 && "this is not modeled!");
                     }
                     m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
 
@@ -193,12 +192,18 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
     // when run to here, means no hit line found,It's a miss;
     if (all_reserved)
     {
-        resfail_times++;
+        resfail_all_res_times++;
         return tlb_result::resfail;
     }
-    if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
+    unsigned reason;
+    if (m_mshrs->full(block_addr, reason))
     {
-        resfail_times++;
+        reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+        return tlb_result::resfail;
+    }
+    if ((m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
+    {
+        resfail_mshr_missq_full_times++;
         return tlb_result::resfail;
     }
     auto next_line = has_free_line ? free_line : last_line;
@@ -207,7 +212,6 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
 
     m_mshrs->add<1>(block_addr, mf);
     m_miss_queue.push_back(mf);
-    assert(m_miss_queue.size() < 10);
     outgoing_mf.insert(mf);
     printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
     miss_times++;
@@ -286,8 +290,8 @@ void l2_tlb::cycle()
             printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,mf:%llx\n", m_config.m_icnt_index, mf->get_virtual_addr());
 
             if (mf->pw_origin != NULL)
-            { //it's a pw resquest
-                m_page_table_walker->send_to_recv_buffer(mf);//
+            {                                                 //it's a pw resquest
+                m_page_table_walker->send_to_recv_buffer(mf); //
                 assert(mf->icnt_from >= 16);
                 printdbg_ICNT("this is a page walker request from memory\n");
                 printdbg_PW("from icnt send to page walker!\n");

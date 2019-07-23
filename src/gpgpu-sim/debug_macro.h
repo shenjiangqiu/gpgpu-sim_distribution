@@ -126,7 +126,37 @@ extern unsigned long long gpu_tot_sim_cycle;
 #endif
 
 // IMPCDEBUG
-
+#ifdef NEIDEBUG
+#define PRINT_WORINGWORKER(working_walker) do{\
+if (working_walker.size() != 0)\
+                {\
+                    for (auto entry : working_walker)\
+                    {\
+                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));\
+                    }\
+                }\
+                else\
+                {\
+                    printdbg_NEI("walker  is empty\n");\
+                }\
+}while(0)
+#define PRINT_WAITINGBUFFER(waiting_buffer) do{\
+if (waiting_buffer.size() != 0)\
+                {\
+                    for (auto entry : waiting_buffer)\
+                    {\
+                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));\
+                    }\
+                }\
+                else\
+                {\
+                    printdbg_NEI("waiting queue is empty\n");\
+                }\
+}while(0)
+#else
+#define PRINT_WORINGWORKER(working_worker) void(0)
+#define PRINT_WAITINGBUFFER(waiting_buffer) void(0)
+#endif
 
 #endif//
 

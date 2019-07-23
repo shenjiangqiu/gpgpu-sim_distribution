@@ -80,15 +80,15 @@ void page_table_walker_config::reg_option(option_parser_t opp)
 {
     option_parser_register(opp, "-page_table_walker_waiting_size", option_dtype::OPT_UINT32, &waiting_queue_size, "waiting queue size", "256");
     option_parser_register(opp, "-page_table_walker_concurrent_size", option_dtype::OPT_UINT32, &walker_size, "the walker_size", "8");
-    option_parser_register(opp, "-page_table_walker_cache_size", option_dtype::OPT_UINT32, &cache_size, "the cache_size", "32");
-    option_parser_register(opp, "-page_table_walker_cache_assoc", option_dtype::OPT_UINT32, &cache_assoc, "the cache_assoc", "2");
+    option_parser_register(opp, "-page_table_walker_cache_size", option_dtype::OPT_UINT32, &cache_size, "the cache_size", "64");
+    option_parser_register(opp, "-page_table_walker_cache_assoc", option_dtype::OPT_UINT32, &cache_assoc, "the cache_assoc", "16");
     option_parser_register(opp, "-page_table_walker_mshr_size", option_dtype::OPT_UINT32, &mshr_size, "mshr_size", "16");
     option_parser_register(opp, "-page_table_walker_mshr_max_merge", option_dtype::OPT_UINT32, &mshr_max_merge, "mshr_max_merge", "8");
-    option_parser_register(opp, "-page_table_walker_range_cache_size", option_dtype::OPT_UINT32, &m_range_size, "range size", "10");
+    option_parser_register(opp, "-page_table_walker_range_cache_size", option_dtype::OPT_UINT32, &m_range_size, "range size", "32");
     option_parser_register(opp, "-page_table_walker_enable_neighbor", option_dtype::OPT_BOOL, &enable_neighborhood, "neighborhood switch", "1");
     option_parser_register(opp, "-page_table_walker_enable_range", option_dtype::OPT_BOOL, &enable_range_pt, "range switch", "1");
     option_parser_register(opp, "-page_table_walker_enable_32_bit", option_dtype::OPT_BOOL, &enable_32_bit, "using 32 bit address space not 64", "0");
-    
+
 }
 bool latency_queue::free() const
 {
@@ -135,7 +135,6 @@ real_page_table_walker::real_page_table_walker(page_table_walker_config m_config
                                                                                     access_times(0),
                                                                                     hit_times(0),
                                                                                     miss_times(0),
-                                                                                    resfail_times(0),
                                                                                     m_range_cache_size(m_config.m_range_size)
 {
     for (unsigned i = 0; i < m_config.cache_size * m_config.cache_assoc; i++)
@@ -229,40 +228,14 @@ void real_page_table_walker::cycle()
             printdbg_NEI("sending a mf from waiting queue to walker:wating queue size:%lu,walker size:%lu!\n", waiting_buffer.size(), working_walker.size());
             printdbg_NEI("before scan\n");
             printdbg_NEI("current waiting queue:\n");
-            #ifdef NEIDEBUG
-            if (waiting_buffer.size() != 0)
-            {
-                for (auto entry : waiting_buffer)
-                {
-                    printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-                }
-            }
-            else
-            {
-                printdbg_NEI("waiting queue is empty\n");
-            }
-
-            #endif
+            PRINT_WAITINGBUFFER(waiting_buffer);
             printdbg_NEI("current walking wakjer:\n");
-            #ifdef NEIDEBUG
-            if (working_walker.size() != 0)
-            {
-                for (auto entry : working_walker)
-                {
-                    printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-                }
-            }
-            else
-            {
-                printdbg_NEI("walker  is empty\n");
-            }
-
-            #endif
+            PRINT_WORINGWORKER(working_walker);
             if (m_config.enable_neighborhood)
             {
                 for (auto &mf_in_waiting : waiting_buffer) //scan and set neiborhood waiting flags
                 {
-                    if (is_neighbor(std::get<1>(mf_in_waiting), std::get<1>(mf), std::get<3>(mf),global_bit)) //only that level can be processed
+                    if (is_neighbor(std::get<1>(mf_in_waiting), std::get<1>(mf), std::get<3>(mf), global_bit)) //only that level can be processed
                     {
                         std::get<0>(mf_in_waiting) = true;
                         std::get<2>(mf_in_waiting) = true;
@@ -272,35 +245,9 @@ void real_page_table_walker::cycle()
             }
             printdbg_NEI("after scan\n");
             printdbg_NEI("current waiting queue:\n");
-            #ifdef NEIDEBUG
-            if (waiting_buffer.size() != 0)
-            {
-                for (auto entry : waiting_buffer)
-                {
-                    printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-                }
-            }
-            else
-            {
-                printdbg_NEI("waiting queue is empty\n");
-            }
-
-            #endif
+            PRINT_WAITINGBUFFER(waiting_buffer);
             printdbg_NEI("current walking wakjer:\n");
-            #ifdef NEIDEBUG
-            if (working_walker.size() != 0)
-            {
-                for (auto entry : working_walker)
-                {
-                    printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-                }
-            }
-            else
-            {
-                printdbg_NEI("walker  is empty\n");
-            }
-
-            #endif
+            PRINT_WORINGWORKER(working_walker);
         }
         //TODO design walker
     }
@@ -312,9 +259,9 @@ void real_page_table_walker::cycle()
         { //send leaf access to l2 cache
             auto next_mf = std::get<1>(working_walker[mf]);
             assert(std::get<2>(working_walker[mf]) == false);
-            set_pw_mf(next_mf,page_table_level::L1_LEAF,mf);
+            set_pw_mf(next_mf, page_table_level::L1_LEAF, mf);
             //assert(total_mf<m_config.walker_size);
-        
+
             auto &target_status = working_walker[mf];
             //assert(next_mf->get_is_write() == false);
             // std::get<0>(target_status) = pagetab
@@ -334,7 +281,6 @@ void real_page_table_walker::cycle()
             case tlb_result::hit:
             {
 
-                hit_times++;
                 auto &target_status = working_walker[mf];
                 auto current_level = std::get<0>(target_status);
                 std::get<0>(target_status) = get_next_level(current_level);
@@ -356,44 +302,18 @@ void real_page_table_walker::cycle()
                 //neighborhood scan and set the flags
                 printdbg_NEI("before scan\n");
                 printdbg_NEI("current waiting queue:\n");
-                #ifdef NEIDEBUG
-                if (waiting_buffer.size() != 0)
-                {
-                    for (auto entry : waiting_buffer)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("waiting queue is empty\n");
-                }
-
-                #endif
+                PRINT_WAITINGBUFFER(waiting_buffer);
                 printdbg_NEI("current walking wakjer:\n");
-                #ifdef NEIDEBUG
-                if (working_walker.size() != 0)
-                {
-                    for (auto entry : working_walker)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("walker  is empty\n");
-                }
-
-                #endif
+                PRINT_WORINGWORKER(working_walker);
                 //send and hit//it's one type of return.don't ne confused!!!
                 if (m_config.enable_neighborhood)
                 {
 
                     for (auto &mf_in_waiting : waiting_buffer)
                     {
-                        if (is_neighbor(std::get<1>(mf_in_waiting), mf, current_level,m_config.enable_32_bit?32:64))
+                        if (is_neighbor(std::get<1>(mf_in_waiting), mf, current_level, m_config.enable_32_bit ? 32 : 64))
                         {
-                            if (is_neighbor(std::get<1>(mf_in_waiting), mf, get_next_level(current_level),m_config.enable_32_bit?32:64))
+                            if (is_neighbor(std::get<1>(mf_in_waiting), mf, get_next_level(current_level), m_config.enable_32_bit ? 32 : 64))
                             {
                                 std::get<0>(mf_in_waiting) = true;
                                 std::get<2>(mf_in_waiting) = true;
@@ -410,41 +330,14 @@ void real_page_table_walker::cycle()
                 }
                 printdbg_NEI("after scan\n");
                 printdbg_NEI("current waiting queue:\n");
-                #ifdef NEIDEBUG
-                if (waiting_buffer.size() != 0)
-                {
-                    for (auto entry : waiting_buffer)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("waiting queue is empty\n");
-                }
-
-                #endif
+                PRINT_WAITINGBUFFER(waiting_buffer);
                 printdbg_NEI("current walking wakjer:\n");
-                #ifdef NEIDEBUG
-                if (working_walker.size() != 0)
-                {
-                    for (auto entry : working_walker)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("walker  is empty\n");
-                }
-
-                #endif
+                PRINT_WORINGWORKER(working_walker);
 
                 break;
             }
             case tlb_result::hit_reserved:
             {
-                miss_times++;
                 assert(std::get<2>(working_walker[mf]) == false);
 
                 std::get<2>(working_walker[mf]) = true; //it's on_going;
@@ -453,7 +346,6 @@ void real_page_table_walker::cycle()
             }
             case tlb_result::miss:
             {
-                miss_times++;
                 assert(std::get<2>(working_walker[mf]) == false);
                 std::get<2>(working_walker[mf]) = true;
                 ready_to_send.pop();
@@ -461,7 +353,6 @@ void real_page_table_walker::cycle()
             }
             case tlb_result::resfail:
                 //do nothing
-                resfail_times++;
                 printdbg_ICNT("pagetable walker cache res fail,ready to send size:%lu\n", ready_to_send.size());
                 break;
             default:
@@ -511,35 +402,9 @@ void real_page_table_walker::cycle()
                 printdbg_NEI("levle 1 come from inct!\n");
                 printdbg_NEI("current waiting queue:\n");
                 printdbg_NEI("before scan\n");
-                #ifdef NEIDEBUG
-                if (waiting_buffer.size() != 0)
-                {
-                    for (auto entry : waiting_buffer)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("waiting queue is empty\n");
-                }
-
-                #endif
+                PRINT_WAITINGBUFFER(waiting_buffer);
                 printdbg_NEI("current walking wakjer:\n");
-                #ifdef NEIDEBUG
-                if (working_walker.size() != 0)
-                {
-                    for (auto entry : working_walker)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("walker  is empty\n");
-                }
-
-                #endif
+                PRINT_WORINGWORKER(working_walker);
                 /* this code is wrong, guess why!?
                 for (auto start = waiting_buffer.begin(); start != waiting_buffer.end(); start++)
                 {
@@ -556,7 +421,7 @@ void real_page_table_walker::cycle()
 
                     for (auto start = waiting_buffer.begin(); start != waiting_buffer.end();)
                     {
-                        if (is_neighbor(std::get<1>(*start), mf_origin, level,m_config.enable_32_bit?32:64))
+                        if (is_neighbor(std::get<1>(*start), mf_origin, level, m_config.enable_32_bit ? 32 : 64))
                         {
                             response_queue.push(std::get<1>(*start));
                             start = waiting_buffer.erase(start);
@@ -576,35 +441,9 @@ void real_page_table_walker::cycle()
                 waiting_buffer.remove_if(is_neibor_wrapper); */
                 printdbg_NEI("after scan\n");
                 printdbg_NEI("current waiting queue:\n");
-                #ifdef NEIDEBUG
-                if (waiting_buffer.size() != 0)
-                {
-                    for (auto entry : waiting_buffer)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("waiting queue is empty\n");
-                }
-
-                #endif
+                PRINT_WAITINGBUFFER(waiting_buffer);
                 printdbg_NEI("current walking wakjer:\n");
-                #ifdef NEIDEBUG
-                if (working_walker.size() != 0)
-                {
-                    for (auto entry : working_walker)
-                    {
-                        printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-                    }
-                }
-                else
-                {
-                    printdbg_NEI("walker  is empty\n");
-                }
-
-                #endif
+                PRINT_WORINGWORKER(working_walker);
                 assert(std::get<2>(working_walker[mf_origin]) == true);
                 delete child_mf;
                 total_mf--;
@@ -628,43 +467,17 @@ void real_page_table_walker::cycle()
         printdbg_NEI("mshr ready!\n");
         printdbg_NEI("before scan\n");
         printdbg_NEI("current waiting queue:\n");
-        #ifdef NEIDEBUG
-        if (waiting_buffer.size() != 0)
-        {
-            for (auto entry : waiting_buffer)
-            {
-                printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-            }
-        }
-        else
-        {
-            printdbg_NEI("waiting queue is empty\n");
-        }
-
-        #endif
+        PRINT_WAITINGBUFFER(waiting_buffer);
         printdbg_NEI("current walking wakjer:\n");
-        #ifdef NEIDEBUG
-        if (working_walker.size() != 0)
-        {
-            for (auto entry : working_walker)
-            {
-                printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-            }
-        }
-        else
-        {
-            printdbg_NEI("walker  is empty\n");
-        }
-
-        #endif
+        PRINT_WORINGWORKER(working_walker);
         //non-l1 come back
         if (m_config.enable_neighborhood)
         {
             for (auto &mf_in_waiting : waiting_buffer)
             {
-                if (is_neighbor(std::get<1>(mf_in_waiting), mf_origin, level,m_config.enable_32_bit?32:64))
+                if (is_neighbor(std::get<1>(mf_in_waiting), mf_origin, level, m_config.enable_32_bit ? 32 : 64))
                 {
-                    if (is_neighbor(std::get<1>(mf_in_waiting), mf_origin, get_next_level(level),m_config.enable_32_bit?32:64))
+                    if (is_neighbor(std::get<1>(mf_in_waiting), mf_origin, get_next_level(level), m_config.enable_32_bit ? 32 : 64))
                     {
                         std::get<0>(mf_in_waiting) = true;
                         std::get<2>(mf_in_waiting) = true;
@@ -681,35 +494,9 @@ void real_page_table_walker::cycle()
         }
         printdbg_NEI("after scan\n");
         printdbg_NEI("current waiting queue:\n");
-        #ifdef NEIDEBUG
-        if (waiting_buffer.size() != 0)
-        {
-            for (auto entry : waiting_buffer)
-            {
-                printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is col:%u, outgoin:%u\n", std::get<1>(entry)->virtual_addr, 4 - (unsigned)std::get<3>(entry), std::get<0>(entry), std::get<2>(entry));
-            }
-        }
-        else
-        {
-            printdbg_NEI("waiting queue is empty\n");
-        }
-
-        #endif
+        PRINT_WAITINGBUFFER(waiting_buffer);
         printdbg_NEI("current walking wakjer:\n");
-        #ifdef NEIDEBUG
-        if (working_walker.size() != 0)
-        {
-            for (auto entry : working_walker)
-            {
-                printdbg_NEI("entry:virtual_addr:%llx,current level:%u,is_outgoing:%u\n", entry.first->virtual_addr, 4 - (unsigned)std::get<0>(entry.second), std::get<2>(entry.second));
-            }
-        }
-        else
-        {
-            printdbg_NEI("walker  is empty\n");
-        }
-
-        #endif
+        PRINT_WORINGWORKER(working_walker);
 
         delete child_mf;
         total_mf--;
@@ -737,9 +524,9 @@ void real_page_table_walker::cycle()
 
 void page_table_walker_config::init()
 {
-    global_bit=enable_32_bit?32:64;
+    global_bit = enable_32_bit ? 32 : 64;
 }
-tlb_result real_page_table_walker::access(mem_fetch *child_mf)
+tlb_result real_page_table_walker::access(mem_fetch *child_mf) //start to redesin the LRU replacement poly
 {
     auto parent_mf = child_mf->pw_origin;
     assert(std::get<0>(working_walker[parent_mf]) != page_table_level::L1_LEAF); //leaf shouldn't access cache
@@ -800,9 +587,11 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
                     {
                     case RESERVED:
                     {
-                        if (m_mshr->full(block_addr))
+                        unsigned reason;
+                        if (m_mshr->full(block_addr, reason))
                         {
                             printdbg_tlb("reserved! and mshr full\n");
+                            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
                             return tlb_result::resfail;
                         }
                         else
@@ -813,6 +602,7 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
 
                             //ready_to_send.pop();
                             (*start)->set_last_access_time(time, mask);
+                            hit_reserved_times++;
                             return tlb_result::hit_reserved;
                         }
                         break;
@@ -820,7 +610,7 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
                     case VALID:
                     {
                         printdbg_tlb("child mf hit: mf:%llX\n", child_mf->get_virtual_addr());
-
+                        hit_times++;
                         return tlb_result::hit;
                         break;
                     }
@@ -851,11 +641,14 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
         }
         if (all_reserved)
         {
+            resfail_all_res_times++;
             return tlb_result::resfail;
         }
         // when run to here, means no hit line found,It's a miss;
-        if (m_mshr->full(block_addr))
+        unsigned reason;
+        if (m_mshr->full(block_addr, reason))
         {
+            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
             return tlb_result::resfail;
         }
         auto next_line = has_free_line ? free_line : last_line;
@@ -864,7 +657,7 @@ tlb_result real_page_table_walker::access(mem_fetch *child_mf)
         miss_queue.push(child_mf);
         assert(miss_queue.size() < 10);
         //ready_to_send.pop();
-
+        miss_times++;
         //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
         return tlb_result::miss;
     }

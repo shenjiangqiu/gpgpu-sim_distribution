@@ -1,5 +1,5 @@
 #include "l1_tlb.h"
-#include"tlb_icnt.h"
+#include "tlb_icnt.h"
 #include "gpu-cache.h"
 #include "icnt_wrapper.h"
 #include <deque>
@@ -8,15 +8,14 @@ extern unsigned long long gpu_tot_sim_cycle;
 #define TLBDEBUG
 #define PWDEBUG
 #include "debug_macro.h"
-l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager,const std::string& name) : m_config(config),
-                                                                        m_page_manager(tlb_page_manager),
-                                                                        m_mshrs(new mshr_table(config.n_mshr_entries, config.n_mshr_max_merge)),
-                                                                        m_tag_arrays(config.n_sets * config.n_associate),
-                                                                        access_times(0),
-                                                                        hit_times(0),
-                                                                        miss_times(0),
-                                                                        resfail_times(0),
-                                                                        name(name)
+l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager, const std::string &name) : m_config(config),
+                                                                                                 m_page_manager(tlb_page_manager),
+                                                                                                 m_mshrs(new mshr_table(config.n_mshr_entries, config.n_mshr_max_merge)),
+                                                                                                 m_tag_arrays(config.n_sets * config.n_associate),
+                                                                                                 access_times(0),
+                                                                                                 hit_times(0),
+                                                                                                 miss_times(0),
+                                                                                                 name(name)
 {
     for (unsigned i = 0; i < config.n_sets * config.n_associate; i++)
     {
@@ -81,7 +80,6 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         //auto result=tlb_result::hit;
         access_times++;
 
-        
         auto v_addr = mf->get_virtual_addr();
         //auto v_addr = m_page_manager->get_vir_addr(addr);
         auto m_page_size_log2 = m_config.m_page_size_log2;
@@ -109,7 +107,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
             if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
             {
                 auto status = (*start)->get_status(mask);
-                if (status != RESERVED)//for eviction
+                if (status != RESERVED) //for eviction
                 {
                     assert(status == VALID);
                     all_reserved = false;
@@ -118,9 +116,10 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                         oldest_access_time = (*start)->get_last_access_time();
                         last_line = start;
                     }
-                }else{
+                }
+                else
+                {
                     assert(time - (*start)->get_alloc_time() < 50000);
-
                 }
 
                 if ((*start)->m_tag == tag)
@@ -130,12 +129,13 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                     switch (status)
                     {
                     case RESERVED:
-                        //assert((time - (*start)->get_alloc_time()) < 5000); //shouldn't be always reserved
-                        if (m_mshrs->full(block_addr))
+                    {
+                        unsigned reason = 0;
+                        if (m_mshrs->full(block_addr, reason))
                         {
                             printdbg_tlb("l1 hit_reserved and mshr full\n");
-                            
-                            resfail_times++;
+
+                            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
                             return tlb_result::resfail;
                         }
                         else
@@ -144,26 +144,33 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                             printdbg_tlb("l1 hit_reserved and push to mshr\n");
                             (*start)->set_last_access_time(time, mask);
                             mf->finished_tlb = true;
-                            miss_times++;
-                            
+                            hit_reserved_times++;
+
                             return tlb_result::hit_reserved;
                         }
                         break;
+                    }
                     case VALID:
+                    {
                         printdbg_tlb("push to response queu: mf: %llX\n", mf->get_virtual_addr());
                         mf->finished_tlb = true;
                         m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                         hit_times++;
-                        
+
                         return tlb_result::hit;
 
                         break;
+                    }
 
                     case MODIFIED:
+                    {
                         throw std::runtime_error("tlb cache can't be modified, it's read only!");
+                    }
                     default:
+                    {
                         throw std::runtime_error("error");
                         break;
+                    }
                     }
                     break;
                 }
@@ -180,15 +187,21 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
         }
         if (all_reserved)
         {
-            
-            resfail_times++;
+
+            resfail_all_res_times++;
             return tlb_result::resfail;
         }
         // when run to here, means no hit line found,It's a miss;
-        if (m_mshrs->full(block_addr) || (m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
+        unsigned reason;
+        if (m_mshrs->full(block_addr, reason))
         {
             printdbg_tlb("miss and mshr fail: mf:%llX\n", mf->get_virtual_addr());
-            resfail_times++;
+            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+            return tlb_result::resfail;
+        }
+        if ((m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
+        {
+            resfail_mshr_missq_full_times++;
             return tlb_result::resfail;
         }
         auto next_line = has_free_line ? free_line : last_line;
@@ -216,7 +229,7 @@ void l1_tlb::cycle()
         auto mf = m_miss_queue.front();
         //auto size = mf->get_ctrl_size(); //read only need 8 bytes
         //if (::icnt_has_buffer(mf->get_tpc(), size))
-        if(global_tlb_icnt->free(mf->get_tpc(),m_config.m_icnt_index))
+        if (global_tlb_icnt->free(mf->get_tpc(), m_config.m_icnt_index))
         {
             printdbg_tlb("from miss queue to icnt,mftpc: %u;mf :%llX\n", mf->get_tpc(), mf->get_virtual_addr());
             //::icnt_push(mf->get_tpc(), m_config.m_icnt_index, mf, size);
@@ -281,8 +294,8 @@ void l1I_tlb_config::reg_option(option_parser_t opp)
 {
     option_parser_register(opp, "-l1Itlbsets", option_dtype::OPT_INT32, &n_sets, "the sets of l1 tlb", "1");
     option_parser_register(opp, "-l1Itlbassoc", option_dtype::OPT_UINT32, &n_associate, "the set associate", "32");
-    option_parser_register(opp, "-l1Itlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "4");//number of instruction
-    option_parser_register(opp, "-l1Itlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "50");//number of cores
+    option_parser_register(opp, "-l1Itlb_mshr_entries", option_dtype::OPT_UINT32, &n_mshr_entries, "the number of mshr entries", "4");              //number of instruction
+    option_parser_register(opp, "-l1Itlb_mshr_maxmerge", option_dtype::OPT_UINT32, &n_mshr_max_merge, "the max resqust that mshr can merge", "50"); //number of cores
     option_parser_register(opp, "-l1Itlb_response_queue_size", option_dtype::OPT_UINT32, &response_queue_size, "the size of response queue: 0=unlimited", "0");
     option_parser_register(opp, "-l1Itlb_miss_queue_size", option_dtype::OPT_UINT32, &miss_queue_size, "the size of miss queue: 0=unlimited", "0");
     option_parser_register(opp, "-l1Itlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the tlb_line_size,currently we only support 4096", "4096");

@@ -526,12 +526,18 @@ bool mshr_table::probe( new_addr_type block_addr ) const{
 }
 
 /// Checks if there is space for tracking a new memory access
-bool mshr_table::full( new_addr_type block_addr ) const{
+bool mshr_table::full( new_addr_type block_addr ,unsigned & reason) const{
     table::const_iterator i=m_data.find(block_addr);
-    if ( i != m_data.end() )
+    if (i != m_data.end())
+    {
+        reason = 1;
         return i->second.m_list.size() >= m_max_merged;
+    }
     else
+    {
+        reason = 2;
         return m_data.size() >= m_num_entries;
+    }
 }
 
 /// Add or merge this access
@@ -1024,7 +1030,8 @@ void baseline_cache::send_read_request(new_addr_type addr, new_addr_type block_a
 
 	new_addr_type mshr_addr = m_config.mshr_addr(mf->get_physic_addr());
     bool mshr_hit = m_mshrs.probe(mshr_addr);
-    bool mshr_avail = !m_mshrs.full(mshr_addr);
+    unsigned reason;
+    bool mshr_avail = !m_mshrs.full(mshr_addr,reason);
     if ( mshr_hit && mshr_avail ) {
     	if(read_only)
     		m_tag_array->access(block_addr,time,cache_index,mf);
@@ -1144,7 +1151,8 @@ data_cache::wr_miss_wa_naive( new_addr_type addr,
     // Write allocate, maximum 3 requests (write miss, read request, write back request)
     // Conservatively ensure the worst-case request can be handled this cycle
     bool mshr_hit = m_mshrs.probe(mshr_addr);
-    bool mshr_avail = !m_mshrs.full(mshr_addr);
+    unsigned reason;
+    bool mshr_avail = !m_mshrs.full(mshr_addr,reason);
     if(miss_queue_full(2) 
         || (!(mshr_hit && mshr_avail) 
         && !(!mshr_hit && mshr_avail && (m_miss_queue.size() < m_config.m_miss_queue_size)))) {
@@ -1252,7 +1260,8 @@ data_cache::wr_miss_wa_fetch_on_write( new_addr_type addr,
 	else
 	{
 		bool mshr_hit = m_mshrs.probe(mshr_addr);
-		bool mshr_avail = !m_mshrs.full(mshr_addr);
+        unsigned reason;
+		bool mshr_avail = !m_mshrs.full(mshr_addr,reason);
 		if(miss_queue_full(1)
 			|| (!(mshr_hit && mshr_avail)
 			&& !(!mshr_hit && mshr_avail && (m_miss_queue.size() < m_config.m_miss_queue_size)))) {
