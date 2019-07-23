@@ -8,6 +8,8 @@
 #include "l1_tlb.h"
 #include "debug_macro.h"
 
+
+
 class abstract_page_table_walker
 {
 public:
@@ -186,7 +188,7 @@ private:
             gpu_sim_cycle+gpu_tot_sim_cycle,\
             true));
         }
-        else if(access_range(addr)){//hit
+        else if(access_range<0>(addr)){//hit
             //it' s in the cache already, do nothing
         }else if(m_range_cache.size()<m_range_cache_size){//miss and add
             m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),\
@@ -208,7 +210,8 @@ private:
                 }
             }
             m_range_cache.erase(oldest_itr);
-            m_range_cache.push_back(std::make_tuple(std::get<1>(range_entry),\
+
+            m_range_cache.push_back(std::make_tuple(std::get<0>(range_entry),\
             std::get<1>(range_entry),\
             std::get<2>(range_entry),\
             gpu_sim_cycle+gpu_tot_sim_cycle,\
@@ -217,30 +220,74 @@ private:
         }
 
     }
-
+    template<int N>
     bool access_range(addr_type virtual_addr)
     {
-        range_cache_access++;
+        ///range_cache_access++;
+        if (N == 0)
+        {
+            printdbg_PTRNG("\n\n-----start to access range_cache, not real!!,just fill test!-----\n");
+        }
+        else
+        {
+            printdbg_PTRNG("\n\n-----start to access range_cache, It's real!!,!!!----------------\n");
+        }
+
         virtual_addr &= ~(global_bit==32?0x1ffff: 0x1fffff);
         if (m_range_cache.empty()){
-            range_cache_miss++;
+            //if(N==0)
+            printdbg_PTRNG("access but range empty!\n");
+            //range_cache_miss++;
+            if (N == 0)
+            {
+                printdbg_PTRNG("\n\n-----end accessing!, not real!!,just fill test!-----\n");
+            }
+            else
+            {
+                printdbg_PTRNG("\n\n-----end accessing!, It's real!!,!!!----------------\n");
+            }
+
             return false;
         }
+        
+        printdbg_PTRNG("current cache size:%lu __ access good,addr:%llx,v_addr,index:%llu\n ",m_range_cache.size(),virtual_addr,virtual_addr>>(global_bit==32?17:21));
+        
+        PRINTRNG_CACHE(m_range_cache);
         for (auto entry : m_range_cache)
         {
+            printdbg_PTRNG("acces here!\n");
             auto v_addr=std::get<0>(entry);
             auto sz=std::get<2>(entry);
-            auto valid=std::get<4>(entry);
-            if(valid){
-                auto gap=(virtual_addr-v_addr)<<(global_bit==32?17:21);
-                if(gap>=0 and gap < sz){//size=2,gap=1 good, size=2 gap=2 not good!!!
-                    std::get<3>(entry)=gpu_sim_cycle+gpu_tot_sim_cycle;
-                    range_cache_hit++;
+            auto valid = std::get<4>(entry);
+            if (valid)
+            {
+                auto gap = (virtual_addr - v_addr) >> (global_bit == 32 ? 17 : 21);
+                printdbg("gap=%llu\n", gap);
+                if (gap >= 0 and gap < sz)
+                { //size=2,gap=1 good, size=2 gap=2 not good!!!
+                    std::get<3>(entry) = gpu_sim_cycle + gpu_tot_sim_cycle;
+                    //range_cache_hit++;
+                    if (N == 0)
+                    {
+                        printdbg_PTRNG("\n\n-----end accessing!, not real!!,just fill test!-----\n");
+                    }
+                    else
+                    {
+                        printdbg_PTRNG("\n\n-----end accessing!, It's real!!,!!!----------------\n");
+                    }
                     return true;
                 }
             }
         }
-        range_cache_miss++;
+        //range_cache_miss++;
+        if (N == 0)
+        {
+            printdbg_PTRNG("\n\n-----end accessing!, not real!!,just fill test!-----\n");
+        }
+        else
+        {
+            printdbg_PTRNG("\n\n-----start accessing!, It's real!!,!!!----------------\n");
+        }
         return false;
     }
 

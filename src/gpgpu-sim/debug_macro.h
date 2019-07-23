@@ -101,5 +101,18 @@ extern unsigned long long gpu_tot_sim_cycle;
 #define printdbg_PTRNG(...) void(0)
 #endif
 
+#ifdef PTRNGDEBUG
+    #define PRINTRNG_CACHE(cache) do{  \
+    for(auto entry:cache){\
+    printdbg_PTRNG("vaddr:%llx,paddr:%llx,size:%u,v_no:%llu,p_no:%llu,access time:%llu\n",std::get<0>(entry),\
+    std::get<1>(entry),\
+    std::get<2>(entry),\
+    std::get<0>(entry)>>(global_bit==32?17ull:21ull),\
+    std::get<1>(entry)>>(global_bit==32?8ull:12ull),\
+    std::get<3>(entry));}}while(0)
+#else
+    #define PRINTRNG_CACHE(cache)  void(0)
+#endif
+
 
 #endif//

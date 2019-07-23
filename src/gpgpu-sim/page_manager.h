@@ -102,7 +102,7 @@ class page_table;
     {                                                                                                 \
         for (auto entry : m_pt_set)                                                                   \
         {                                                                                             \
-            printdbg_PTRNG("start_addr:%llx,physic_addr:%llx,size:%u,start_no:%llx;physic_no:%llx\n", \
+            printdbg_PTRNG("start_addr:%llx,physic_addr:%llx,size:%u,start_no:%llu;physic_no:%llu\n", \
                            std::get<0>(entry),                                                        \
                            std::get<1>(entry),                                                        \
                            std::get<2>(entry),                                                        \
@@ -192,6 +192,9 @@ public:
         }
         else
         {
+            if(std::get<2>(*entry)==1){//that's not a range
+                return false;
+            }
             auto gap = get_page_gap(*entry, std::make_tuple(virtual_addr, 0, 0));
             if (gap < std::get<2>(*entry))
             {

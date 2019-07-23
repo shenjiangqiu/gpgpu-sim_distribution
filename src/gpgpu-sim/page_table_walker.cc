@@ -878,14 +878,17 @@ bool real_page_table_walker::send(mem_fetch *mf)
     {
         if (m_config.enable_range_pt)
         {
-            auto is_hit_in_range = access_range(mf->get_virtual_addr());
+            range_cache_access++;
+            auto is_hit_in_range = access_range<1>(mf->get_virtual_addr());
 
             if (is_hit_in_range)
             {
+                range_cache_hit++;
                 waiting_buffer.push_back(std::make_tuple(false, mf, false, page_table_level::L1_LEAF, 0));
             }
             else
             {
+                range_cache_miss++;
                 //check if the range exist in memory!
                 auto is_hit = global_page_manager->is_in_range(mf->get_virtual_addr() & ~0x1fffff);
                 if (is_hit)
