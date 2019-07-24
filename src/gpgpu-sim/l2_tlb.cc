@@ -126,7 +126,7 @@ tlb_result l2_tlb::access(mem_fetch *mf, unsigned long long time)
             }
             else
             {
-                assert(time - (*start)->get_alloc_time() < 5000);
+                //assert(time - (*start)->get_alloc_time() < 5000);
             }
 
             if ((*start)->m_tag == tag) //ok we find// this is what the identity entry/try to find that entry
