@@ -83,7 +83,7 @@ void l2_tlb_config::set_icnt_index(unsigned int idx)
 {
     m_icnt_index = idx;
 }
-tlb_result l2_tlb::access(mem_fetch *mf, unsigned time)
+tlb_result l2_tlb::access(mem_fetch *mf, unsigned long long  time)
 {
     assert(mf != nullptr);
 

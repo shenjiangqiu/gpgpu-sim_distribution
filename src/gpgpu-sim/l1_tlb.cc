@@ -68,7 +68,7 @@ mem_fetch *l1_tlb::get_top_response()
     return m_response_queue.front();
 }
 
-tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
+tlb_result l1_tlb::access(mem_fetch *mf, unsigned long long time)
 {
     if (mf == nullptr)
     {
@@ -119,7 +119,19 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned time)
                 }
                 else
                 {
-                    assert(time - (*start)->get_alloc_time() < 50000);
+                    static unsigned times=0;
+                    if(time - (*start)->get_alloc_time() >= 50000){
+                        printf("No!");
+                        printf("allocate time:%llu, now: %llu ,tag: %llu\n",
+                               (*start)->get_alloc_time(),
+                               time,
+                               (*start)->m_tag);
+                        times++;
+                    }
+                    if(times>=10){
+                        abort();
+                    }
+                    
                 }
 
                 if ((*start)->m_tag == tag)

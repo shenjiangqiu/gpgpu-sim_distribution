@@ -55,7 +55,7 @@ public:
     l1_tlb(l1_tlb &other) = delete;
     l1_tlb(l1_tlb &&other) = delete;
     void init();
-    tlb_result access(mem_fetch *mf, unsigned time);
+    tlb_result access(mem_fetch *mf, unsigned long long time);
     mem_fetch *get_top_response();
     void pop_response();
     bool reponse_empty();

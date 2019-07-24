@@ -57,7 +57,7 @@ public:
     }
     l2_tlb(l2_tlb_config m_config);
     void init();
-    tlb_result access(mem_fetch *mf, unsigned time);
+    tlb_result access(mem_fetch *mf, unsigned long long  time);
     mem_fetch *get_top_response();
     void pop_response();
     bool reponse_empty();
