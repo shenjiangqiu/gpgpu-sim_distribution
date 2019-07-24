@@ -279,7 +279,7 @@ void real_page_table_walker::cycle()
         else
         {
             auto child_mf = std::get<1>(working_walker[mf]);
-            access_times++;
+            //access_times++;
             tlb_result result;
             if (m_config.using_new_lru)
                 result = access<2>(child_mf); //that will chage the status of working worker//that will access the cache

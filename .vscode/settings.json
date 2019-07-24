@@ -52,6 +52,12 @@
         "numeric": "cpp",
         "streambuf": "cpp",
         "type_traits": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "bit": "cpp",
+        "map": "cpp",
+        "set": "cpp",
+        "optional": "cpp",
+        "string": "cpp",
+        "string_view": "cpp"
     }
 }

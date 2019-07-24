@@ -71,6 +71,7 @@ struct comparator_by_start_point_pair
 using range_set_compare_by_size = std::set<range, comparator_by_size<range>>;
 //a set contain ranges which sorted by start address
 using range_set_compare_by_start = std::set<range, comparator_by_start_point<range>>;
+//0:v,1 p,2,size
 using page_table_range_buffer_entry = std::tuple<addr_type, addr_type, unsigned>;
 //a set contain pair<ranges,length> which sorted by start address of ranges
 using pt_range_buffer_set = std::set<page_table_range_buffer_entry, comparator_by_start_point_pair<page_table_range_buffer_entry>>;
@@ -221,6 +222,9 @@ public:
     }
     unsigned get_range_bit_pt_offset(){
         return m_bit==64?12:8;
+    }
+    pt_range_buffer_set get_m_set(){
+        return m_pt_set;
     }
 
 private:

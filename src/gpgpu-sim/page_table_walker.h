@@ -125,7 +125,7 @@ public:
             auto time = oldest_access_time;
             auto mask = child_mf->get_access_sector_mask();
             bool all_reserved = true;
-
+            bool has_free_line = false;
             if (lru_type == 1)
             {
                 access_times++;
@@ -246,8 +246,8 @@ public:
                 auto &set_line = new_tag_arrays[set_index];
                 if (set_line.empty())
                 {
-                    auto ret = set_line.emplace_back();
-                    ret->allocate(tag, block_addr, time, mask);
+                    set_line.emplace_back(new line_cache_block());
+                    set_line.back()->allocate(tag, block_addr, time, mask);
                     hit_times++;
                     return tlb_result::hit;
                 }
@@ -257,7 +257,8 @@ public:
                 {
                     if (set_line.size() < insert_position)
                     {
-                        set_line.emplace_back()->allocate(tag, block_addr, time, mask);
+                        set_line.emplace_back(new line_cache_block());
+                        set_line.back()->allocate(tag, block_addr, time, mask);
                         return tlb_result::hit;
                     }
                     else
@@ -270,107 +271,6 @@ public:
                         return tlb_result::hit;
                     }
                 }
-
-                for (; start < end; start++)
-                {
-                    if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
-                    {
-                        auto status = (*start)->get_status(mask);
-                        if (status != RESERVED) //for eviction
-                        {
-                            assert(status == VALID);
-                            all_reserved = false;
-                            if ((*start)->get_last_access_time() < oldest_access_time)
-                            {
-                                oldest_access_time = (*start)->get_last_access_time();
-                                last_line = start;
-                            }
-                        }
-                        else
-                        {
-                            assert(time - (*start)->get_alloc_time() < 50000);
-                        }
-
-                        if ((*start)->m_tag == tag) //ok we find
-                        {
-
-                            auto status = (*start)->get_status(mask);
-                            switch (status)
-                            {
-                            case RESERVED:
-                            {
-                                unsigned reason;
-                                if (m_mshr->full(block_addr, reason))
-                                {
-                                    printdbg_tlb("reserved! and mshr full\n");
-                                    reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
-                                    return tlb_result::resfail;
-                                }
-                                else
-                                {
-                                    printdbg_tlb("hit reserved! add to mfshr\n");
-
-                                    m_mshr->add<2>(block_addr, child_mf); //not new
-
-                                    //ready_to_send.pop();
-                                    (*start)->set_last_access_time(time, mask);
-                                    hit_reserved_times++;
-                                    return tlb_result::hit_reserved;
-                                }
-                                break;
-                            }
-                            case VALID:
-                            {
-                                printdbg_tlb("child mf hit: mf:%llX\n", child_mf->get_virtual_addr());
-                                hit_times++;
-                                return tlb_result::hit;
-                                break;
-                            }
-                            case MODIFIED:
-                            {
-
-                                throw std::runtime_error("tlb cache can't be modified, it's read only!");
-                                return tlb_result::resfail;
-                                break;
-                            }
-                            default:
-                                throw std::runtime_error("error");
-                                return tlb_result::resfail;
-                                break;
-                            }
-                            break;
-                        }
-                    }
-                    else
-                    { //any time find the valid line, get it!
-                        all_reserved = false;
-                        if (has_free_line == false)
-                        {
-                            has_free_line = true;
-                            free_line = start;
-                        }
-                    }
-                }
-                if (all_reserved)
-                {
-                    resfail_all_res_times++;
-                    return tlb_result::resfail;
-                }
-                // when run to here, means no hit line found,It's a miss;
-                unsigned reason;
-                if (m_mshr->full(block_addr, reason))
-                {
-                    reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
-                    return tlb_result::resfail;
-                }
-                auto next_line = has_free_line ? free_line : last_line;
-                (*next_line)->allocate(tag, block_addr, time, mask);
-                m_mshr->add<1>(block_addr, child_mf);
-                miss_queue.push(child_mf);
-                assert(miss_queue.size() < 10);
-                //ready_to_send.pop();
-                miss_times++;
-                //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
                 return tlb_result::miss;
             }
         }
@@ -386,13 +286,25 @@ public:
         fprintf(file, "pwc_hit: %llu\n", hit_times);
         fprintf(file, "pwc_miss: %llu\n", miss_times);
         fprintf(file, "pwc_resfail_all_res: %llu\n", resfail_all_res_times);
-        fprintf(file, "pwc_resfail_entry_full: %llu\n", resfail_mshr_entry_full_times);
-        fprintf(file, "pwc_resfail_merge: %llu\n", resfail_mshr_merge_full_times);
+        fprintf(file, "pwc_resfail_mshr_entry_full: %llu\n", resfail_mshr_entry_full_times);
+        fprintf(file, "pwc_resfail_mshr_merge: %llu\n", resfail_mshr_merge_full_times);
         fprintf(file, "pwc_resfail_missq: %llu\n", resfail_mshr_missq_full_times);
 
         fprintf(file, "range cache access: %llu\n", range_cache_access);
         fprintf(file, "range cache hit: %llu\n", range_cache_hit);
         fprintf(file, "range cache miss: %llu\n", range_cache_miss);
+        fprintf(file, "range max size: %lu\n", m_config.m_range_size);
+        unsigned long all_ranges = 0;
+        auto set = global_page_manager->m_range_page_table.get_m_set();
+        for (auto entry : set)
+        {
+            if (std::get<2>(entry) > 1)
+            {
+                all_ranges++;
+            }
+        }
+
+        fprintf(file, "max range built: %lu\n", all_ranges);
     }
     virtual void flush() override
     {
