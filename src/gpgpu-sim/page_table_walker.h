@@ -241,7 +241,7 @@ public:
             }
             else
             { //lru_type==2
-                assert(0 &"cannot go to here now!");
+                assert(0 && "cannot go to here now!");
                 access_times++;
                 auto &set_line = new_tag_arrays[set_index];
                 if (set_line.empty())
