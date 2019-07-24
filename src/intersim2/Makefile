@@ -48,6 +48,7 @@ CPPFLAGS += -O3
 else
 CPPFLAGS += -g
 endif
+CFLAGS:=$(CPPFLAGS) -fPIC
 CPPFLAGS +=  -std=c++11
 CPPFLAGS += -fPIC
 LFLAGS +=
@@ -137,10 +138,10 @@ depend:
 	makedepend -f$(OBJDIR)/Makefile.makedepend -I$(INCPATH) -p$(OBJDIR)/ $(ALL_SRCS) 2> /dev/null
 
 ${LEX_OBJS}: $(OBJDIR)/lex.yy.c $(OBJDIR)/y.tab.h
-	$(CC) $(CPPFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 ${YACC_OBJS}: $(OBJDIR)/y.tab.c $(OBJDIR)/y.tab.h
-	$(CC) $(CPPFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 ${OBJDIR}/%.o: %.cpp 
 	$(CXX) $(CPPFLAGS) -c $< -o $@
