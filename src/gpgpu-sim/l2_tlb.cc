@@ -4,9 +4,7 @@
 #include "icnt_wrapper.h"
 #include <memory>
 #include <deque>
-//#define TLBDEBUG
-#define PWDEBUG
-#define TLBDEBUG
+
 #include "debug_macro.h"
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
@@ -58,7 +56,7 @@ void l2_tlb_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-l2tlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the page size", "4096");
     option_parser_register(opp, "-l2tlb_pw_size", option_dtype::OPT_UINT32, &m_pw_size, "the size of pw size", "16");
     option_parser_register(opp, "-l2tlb_pw_latency", option_dtype::OPT_UINT32, &m_pw_latency, "the latency of pw ", "500");
-    option_parser_register(opp, "-l2tlb_recv_buffer_size", option_dtype::OPT_UINT32, &recv_buffer_size, "the size of recv buffer from icnt", "1000");
+    option_parser_register(opp, "-l2tlb_recv_buffer_size", option_dtype::OPT_UINT32, &recv_buffer_size, "the size of recv buffer from icnt", "128");
 }
 void l2_tlb::init()
 {
@@ -83,7 +81,7 @@ void l2_tlb_config::set_icnt_index(unsigned int idx)
 {
     m_icnt_index = idx;
 }
-tlb_result l2_tlb::access(mem_fetch *mf, unsigned long long  time)
+tlb_result l2_tlb::access(mem_fetch *mf, unsigned long long time)
 {
     assert(mf != nullptr);
 
@@ -236,6 +234,10 @@ void l2_tlb::cycle()
         if (global_tlb_icnt->free(m_config.m_icnt_index, mf->get_tpc()))
         {
             // ::icnt_push(m_config.m_icnt_index, mf->get_tpc(), mf, size);
+            /* if (mf->virtual_addr == 0xc03b5000)
+            {
+                printf("send  from L2 tlb to l1 tlb!core:%u,cycle:%llu\n", mf->get_tpc(), gpu_sim_cycle + gpu_tot_sim_cycle);
+            } */
             global_tlb_icnt->send(m_config.m_icnt_index, mf->get_tpc(), mf, gpu_sim_cycle + gpu_tot_sim_cycle);
             printdbg_ICNT("ICNT:L2 to core:To Core:%u,mf:%llx\n", mf->get_tpc(), mf->get_virtual_addr());
 
@@ -253,7 +255,7 @@ void l2_tlb::cycle()
     {                                                                                                                                                                         //push all the ready access to response Queue
         printdbg_tlb("send m_mshr next access to m response queue\n");
         m_response_queue.push_back(m_mshrs->next_access());
-//        assert(m_response_queue.size() < 100);
+        //        assert(m_response_queue.size() < 100);
         printdbg_tlb("the mf is:%llX\n", m_response_queue.back()->get_virtual_addr());
     }
     while (m_page_table_walker->ready())
@@ -281,38 +283,45 @@ void l2_tlb::cycle()
         }
     }
     mem_fetch *mf = nullptr;
-    if (m_recv_buffer.size() < m_config.recv_buffer_size) //recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
+    if (global_tlb_icnt->ready(m_config.m_icnt_index, gpu_sim_cycle + gpu_tot_sim_cycle))
     {
-        // mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
-        if (global_tlb_icnt->ready(m_config.m_icnt_index, gpu_sim_cycle + gpu_tot_sim_cycle))
+        if (m_recv_buffer.size() < m_config.recv_buffer_size || global_tlb_icnt->recv_probe(m_config.m_icnt_index)->pw_origin != NULL) //recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
         {
-            mf = global_tlb_icnt->recv(m_config.m_icnt_index);
-            printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,mf:%llx\n", m_config.m_icnt_index, mf->get_virtual_addr());
-
-            if (mf->pw_origin != NULL)
-            {                                                 //it's a pw resquest
-                m_page_table_walker->send_to_recv_buffer(mf); //
-                assert(mf->icnt_from >= 16);
-                printdbg_ICNT("this is a page walker request from memory\n");
-                printdbg_PW("from icnt send to page walker!\n");
+            // mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
+            if (global_tlb_icnt->ready(m_config.m_icnt_index, gpu_sim_cycle + gpu_tot_sim_cycle))
+            {
+                mf = global_tlb_icnt->recv(m_config.m_icnt_index);
+                printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,mf:%llx\n", m_config.m_icnt_index, mf->get_virtual_addr());
+                /* if (mf->virtual_addr == 0xc03b5000)
+                {
+                    printf("recved  from l1 tlb to l2tlb!core:%u,cycle:%llu\n", mf->get_tpc(), gpu_sim_cycle + gpu_tot_sim_cycle);
+                } */
+                if (mf->pw_origin != NULL)
+                {                                                 //it's a pw resquest
+                    m_page_table_walker->send_to_recv_buffer(mf); //
+                    assert(mf->icnt_from >= 16);
+                    printdbg_ICNT("this is a page walker request from memory\n");
+                    printdbg_PW("from icnt send to page walker!\n");
+                }
+                else
+                {
+                    assert(mf->icnt_from <= 14);
+                    printdbg_ICNT("this is from Core\n");
+                    printdbg_tlb("get mf from icnt!access mf:%llX,from cluster%u\n", mf->get_virtual_addr(), mf->get_tpc());
+                    m_recv_buffer.push(mf);
+                    //printf("recv_buffer size:%lu\n", m_recv_buffer.size());
+                    printdbg_PW("m recv buffer size:%lu\n", m_recv_buffer.size());
+                }
             }
             else
             {
-                assert(mf->icnt_from <= 14);
-                printdbg_ICNT("this is from Core\n");
-                printdbg_tlb("get mf from icnt!access mf:%llX,from cluster%u\n", mf->get_virtual_addr(), mf->get_tpc());
-                m_recv_buffer.push(mf);
-                printdbg_PW("m recv buffer size:%lu\n", m_recv_buffer.size());
+                printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,NOT READY!\n", m_config.m_icnt_index);
             }
         }
         else
         {
-            printdbg_ICNT("ICNT:L2 RECV:TO L2:%u,NOT READY!\n", m_config.m_icnt_index);
+            printdbg_tlb("in this cycle:%llu, the icnt recv buffer is full\n", gpu_sim_cycle + gpu_tot_sim_cycle);
         }
-    }
-    else
-    {
-        printdbg_tlb("in this cycle:%llu, the icnt recv buffer is full\n", gpu_sim_cycle + gpu_tot_sim_cycle);
     }
 
     if (!m_recv_buffer.empty())
@@ -320,14 +329,26 @@ void l2_tlb::cycle()
         auto mf = m_recv_buffer.front();
         //in access(), will according to result, add to response queue, modify mshr , miss queue, and out of the access(), we need to deal with the mf.
         auto result = access(mf, gpu_sim_cycle + gpu_tot_sim_cycle); //this call will automatically add mf to miss queue, response queue or mshr
+        /* if (mf->virtual_addr == 0xc03b5000)
+        {
+            printf("access L2 tlb  !core:%u,cycle:%llu\n", mf->get_tpc(), gpu_sim_cycle + gpu_tot_sim_cycle);
+        } */
         printdbg_tlb("access result: %s\n", result == tlb_result::hit ? "hit" : result == tlb_result::hit_reserved ? "hit res" : result == tlb_result::miss ? "miss" : "res fail");
         switch (result)
         {
         case tlb_result::resfail: //in this case , we do not pop m_recv_buffer
+            /* if (mf->virtual_addr == 0xc03b5000)
+            {
+                printf("access L2 tlb result:%s !core:%u,cycle:%llu\n", "resfail", mf->get_tpc(), gpu_sim_cycle + gpu_tot_sim_cycle);
+            } */
             printdbg_tlb("l2 tlb access res fail!\n");
             break;
 
         default: //hit,hit reserved, miss.
+            /* if (mf->virtual_addr == 0xc03b5000)
+            {
+                printf("access L2 tlb result:%s !core:%u,cycle:%llu\n", "hit or miss", mf->get_tpc(), gpu_sim_cycle + gpu_tot_sim_cycle);
+            } */
             printdbg_tlb("l2 tlb access res success!\n");
             m_recv_buffer.pop();
             break;

@@ -5,8 +5,7 @@
 #include <deque>
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
-#define TLBDEBUG
-#define PWDEBUG
+
 #include "debug_macro.h"
 l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager, const std::string &name) : m_config(config),
                                                                                                  m_page_manager(tlb_page_manager),
@@ -119,18 +118,7 @@ tlb_result l1_tlb::access(mem_fetch *mf, unsigned long long time)
                 }
                 else
                 {
-                    static unsigned times=0;
-                    if(time - (*start)->get_alloc_time() >= 50000){
-                        printf("No!");
-                        printf("allocate time:%llu, now: %llu ,tag: %llu\n",
-                               (*start)->get_alloc_time(),
-                               time,
-                               (*start)->m_tag);
-                        times++;
-                    }
-                    if(times>=10){
-                        abort();
-                    }
+                    
                     
                 }
 
@@ -246,6 +234,9 @@ void l1_tlb::cycle()
             printdbg_tlb("from miss queue to icnt,mftpc: %u;mf :%llX\n", mf->get_tpc(), mf->get_virtual_addr());
             //::icnt_push(mf->get_tpc(), m_config.m_icnt_index, mf, size);
             global_tlb_icnt->send(mf->get_tpc(), m_config.m_icnt_index, mf, gpu_sim_cycle + gpu_tot_sim_cycle);
+            /* if(mf->virtual_addr==0xc03b5000){
+                printf("from l1 tlb to l2tlb!core:%u,cycle:%llu\n",mf->get_tpc(),gpu_sim_cycle+gpu_tot_sim_cycle);
+            } */
             printdbg_ICNT("ICNT:CORE to L2:from Core:%u,mf:%llx\n", mf->get_tpc(), mf->get_virtual_addr());
             printdbg_PW("push from core:%u,send to %u\n", mf->get_tpc(), m_config.m_icnt_index);
             m_miss_queue.pop_front(); //successfully pushed to icnt

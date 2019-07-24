@@ -5,6 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "(gdb)SYRK ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/jshen2/work/polybench-gpu-1.0/CUDA/SYRK/SYRK",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "/home/jshen2/work/polybench-gpu-1.0/CUDA/SYRK/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
             "name": "(gdb)ATAX ",
             "type": "cppdbg",
             "request": "launch",

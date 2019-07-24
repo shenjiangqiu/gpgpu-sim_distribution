@@ -18,6 +18,18 @@ public:
     bool busy();
     bool ready(unsigned to, unsigned long long time);
     mem_fetch *recv(unsigned to);
+    mem_fetch *recv_probe(unsigned to)
+    {
+        auto &q = send_queue[to];
+        if (q.empty())
+            throw std::runtime_error("Queue empty!");
+        auto ret = q.front().first;
+        //total_inside--;
+        assert(total_inside >= 0);
+        assert(ret);
+        //q.pop();
+        return ret;
+    }
 
 private:
     queue_set send_queue;

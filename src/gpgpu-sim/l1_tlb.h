@@ -47,6 +47,7 @@ public:
     {
         for (unsigned i = 0; i < m_config.n_sets * m_config.n_associate; i++)
         {
+            assert(m_tag_arrays[i]->get_status(mem_access_sector_mask_t())!=RESERVED);
             m_tag_arrays[i]->set_status(INVALID, mem_access_sector_mask_t());
         }
     }
