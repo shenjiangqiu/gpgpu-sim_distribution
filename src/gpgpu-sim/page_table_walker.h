@@ -464,7 +464,7 @@ private:
             if (valid)
             {
                 auto gap = (virtual_addr - v_addr) >> (global_bit == 32 ? 17 : 21);
-                printdbg("gap=%llu\n", gap);
+                printdbg_PTRNG("gap=%llu\n", gap);
                 if (gap >= 0 and gap < sz)
                 { //size=2,gap=1 good, size=2 gap=2 not good!!!
                     std::get<3>(entry) = gpu_sim_cycle + gpu_tot_sim_cycle;
