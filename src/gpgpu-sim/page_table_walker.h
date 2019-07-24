@@ -69,6 +69,10 @@ struct page_table_walker_config
     bool enable_neighborhood;
     bool enable_range_pt;
     bool enable_32_bit;
+    bool using_new_lru;
+    unsigned i1_position;
+    unsigned i2_position;
+    unsigned i3_position;
     void reg_option(option_parser_t opp);
     void init();
 };
@@ -94,7 +98,283 @@ public:
     //virtual bool recv_ready() override;
     virtual mem_fetch *recv() override;             //recv and pop override;
     virtual mem_fetch *recv_probe() const override; //recv not
-    tlb_result access(mem_fetch *mf);
+    template <int lru_type>
+    tlb_result access(mem_fetch *child_mf) //start to redesin the LRU replacement poly
+    {
+        auto parent_mf = child_mf->pw_origin;
+        auto ilevel = parent_mf->trans_important_level;
+
+        assert(std::get<0>(working_walker[parent_mf]) != page_table_level::L1_LEAF); //leaf shouldn't access cache
+        if (child_mf == nullptr)
+        {
+            throw std::runtime_error("accessed mf cann't be null");
+        }
+        else
+        {
+            /* code */
+            auto addr = child_mf->get_physic_addr();
+            auto n_set = m_config.cache_size;
+            auto n_assoc = m_config.cache_assoc;
+
+            // get the set_index and tag for searching the tag array.
+            auto set_index = (addr >> 3) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
+            auto tag = addr & (~static_cast<addr_type>(8 - 1));               //only need the bits besides page offset
+            assert(tag == addr);
+            auto block_addr = addr >> 3;
+            unsigned long long oldest_access_time = gpu_sim_cycle + gpu_tot_sim_cycle;
+            auto time = oldest_access_time;
+            auto mask = child_mf->get_access_sector_mask();
+            bool all_reserved = true;
+
+            if (lru_type == 1)
+            {
+                access_times++;
+                auto start = m_tag_arrays.begin() + n_assoc * set_index;
+                auto end = start + n_assoc;
+                //to find a place to access
+
+                decltype(start) free_line;
+                decltype(start) hit_line;
+                decltype(start) last_line;
+
+                for (; start < end; start++)
+                {
+                    if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
+                    {
+                        auto status = (*start)->get_status(mask);
+                        if (status != RESERVED) //for eviction
+                        {
+                            assert(status == VALID);
+                            all_reserved = false;
+                            if ((*start)->get_last_access_time() < oldest_access_time)
+                            {
+                                oldest_access_time = (*start)->get_last_access_time();
+                                last_line = start;
+                            }
+                        }
+                        else
+                        {
+                            assert(time - (*start)->get_alloc_time() < 50000);
+                        }
+
+                        if ((*start)->m_tag == tag) //ok we find
+                        {
+
+                            auto status = (*start)->get_status(mask);
+                            switch (status)
+                            {
+                            case RESERVED:
+                            {
+                                unsigned reason;
+                                if (m_mshr->full(block_addr, reason))
+                                {
+                                    printdbg_tlb("reserved! and mshr full\n");
+                                    reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                                    return tlb_result::resfail;
+                                }
+                                else
+                                {
+                                    printdbg_tlb("hit reserved! add to mfshr\n");
+
+                                    m_mshr->add<2>(block_addr, child_mf); //not new
+
+                                    //ready_to_send.pop();
+                                    (*start)->set_last_access_time(time, mask);
+                                    hit_reserved_times++;
+                                    return tlb_result::hit_reserved;
+                                }
+                                break;
+                            }
+                            case VALID:
+                            {
+                                printdbg_tlb("child mf hit: mf:%llX\n", child_mf->get_virtual_addr());
+                                hit_times++;
+                                return tlb_result::hit;
+                                break;
+                            }
+                            case MODIFIED:
+                            {
+
+                                throw std::runtime_error("tlb cache can't be modified, it's read only!");
+                                return tlb_result::resfail;
+                                break;
+                            }
+                            default:
+                                throw std::runtime_error("error");
+                                return tlb_result::resfail;
+                                break;
+                            }
+                            break;
+                        }
+                    }
+                    else
+                    { //any time find the valid line, get it!
+                        all_reserved = false;
+                        if (has_free_line == false)
+                        {
+                            has_free_line = true;
+                            free_line = start;
+                        }
+                    }
+                }
+                if (all_reserved)
+                {
+                    resfail_all_res_times++;
+                    return tlb_result::resfail;
+                }
+                // when run to here, means no hit line found,It's a miss;
+                unsigned reason;
+                if (m_mshr->full(block_addr, reason))
+                {
+                    reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                    return tlb_result::resfail;
+                }
+                auto next_line = has_free_line ? free_line : last_line;
+                (*next_line)->allocate(tag, block_addr, time, mask);
+                m_mshr->add<1>(block_addr, child_mf);
+                miss_queue.push(child_mf);
+                assert(miss_queue.size() < 10);
+                //ready_to_send.pop();
+                miss_times++;
+                //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
+                return tlb_result::miss;
+            }
+            else
+            { //lru_type==2
+
+                access_times++;
+                auto &set_line = new_tag_arrays[set_index];
+                if (set_line.empty())
+                {
+                    auto ret = set_line.emplace_back();
+                    ret->allocate(tag, block_addr, time, mask);
+                    hit_times++;
+                    return tlb_result::hit;
+                }
+                //auto ilevel=
+                unsigned insert_position = ilevel == 1 ? m_config.i1_position : ilevel == 2 ? m_config.i2_position : m_config.i3_position;
+                if (set_line.size() < m_config.cache_assoc)
+                {
+                    if (set_line.size() < insert_position)
+                    {
+                        set_line.emplace_back()->allocate(tag, block_addr, time, mask);
+                        return tlb_result::hit;
+                    }
+                    else
+                    {
+                        auto start = set_line.begin();
+                        auto position_dest = std::next(start, insert_position - 1);
+                        auto new_pos = set_line.insert(position_dest, new line_cache_block());
+                        (*new_pos)->allocate(tag, block_addr, time, mask);
+
+                        return tlb_result::hit;
+                    }
+                }
+
+                for (; start < end; start++)
+                {
+                    if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
+                    {
+                        auto status = (*start)->get_status(mask);
+                        if (status != RESERVED) //for eviction
+                        {
+                            assert(status == VALID);
+                            all_reserved = false;
+                            if ((*start)->get_last_access_time() < oldest_access_time)
+                            {
+                                oldest_access_time = (*start)->get_last_access_time();
+                                last_line = start;
+                            }
+                        }
+                        else
+                        {
+                            assert(time - (*start)->get_alloc_time() < 50000);
+                        }
+
+                        if ((*start)->m_tag == tag) //ok we find
+                        {
+
+                            auto status = (*start)->get_status(mask);
+                            switch (status)
+                            {
+                            case RESERVED:
+                            {
+                                unsigned reason;
+                                if (m_mshr->full(block_addr, reason))
+                                {
+                                    printdbg_tlb("reserved! and mshr full\n");
+                                    reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                                    return tlb_result::resfail;
+                                }
+                                else
+                                {
+                                    printdbg_tlb("hit reserved! add to mfshr\n");
+
+                                    m_mshr->add<2>(block_addr, child_mf); //not new
+
+                                    //ready_to_send.pop();
+                                    (*start)->set_last_access_time(time, mask);
+                                    hit_reserved_times++;
+                                    return tlb_result::hit_reserved;
+                                }
+                                break;
+                            }
+                            case VALID:
+                            {
+                                printdbg_tlb("child mf hit: mf:%llX\n", child_mf->get_virtual_addr());
+                                hit_times++;
+                                return tlb_result::hit;
+                                break;
+                            }
+                            case MODIFIED:
+                            {
+
+                                throw std::runtime_error("tlb cache can't be modified, it's read only!");
+                                return tlb_result::resfail;
+                                break;
+                            }
+                            default:
+                                throw std::runtime_error("error");
+                                return tlb_result::resfail;
+                                break;
+                            }
+                            break;
+                        }
+                    }
+                    else
+                    { //any time find the valid line, get it!
+                        all_reserved = false;
+                        if (has_free_line == false)
+                        {
+                            has_free_line = true;
+                            free_line = start;
+                        }
+                    }
+                }
+                if (all_reserved)
+                {
+                    resfail_all_res_times++;
+                    return tlb_result::resfail;
+                }
+                // when run to here, means no hit line found,It's a miss;
+                unsigned reason;
+                if (m_mshr->full(block_addr, reason))
+                {
+                    reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                    return tlb_result::resfail;
+                }
+                auto next_line = has_free_line ? free_line : last_line;
+                (*next_line)->allocate(tag, block_addr, time, mask);
+                m_mshr->add<1>(block_addr, child_mf);
+                miss_queue.push(child_mf);
+                assert(miss_queue.size() < 10);
+                //ready_to_send.pop();
+                miss_times++;
+                //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
+                return tlb_result::miss;
+            }
+        }
+    }
     virtual void send_to_recv_buffer(mem_fetch *mf)
     {
         icnt_response_buffer.push(mf);
@@ -204,7 +484,8 @@ private:
                                                     true));
         }
         else
-        { //miss and replace
+        {
+            //miss and replace
             //find the oldeast;
             unsigned long long oldest = gpu_sim_cycle + gpu_tot_sim_cycle;
             decltype(m_range_cache.begin()) oldest_itr;

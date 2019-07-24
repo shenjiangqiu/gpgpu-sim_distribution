@@ -88,7 +88,10 @@ void page_table_walker_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-page_table_walker_enable_neighbor", option_dtype::OPT_BOOL, &enable_neighborhood, "neighborhood switch", "1");
     option_parser_register(opp, "-page_table_walker_enable_range", option_dtype::OPT_BOOL, &enable_range_pt, "range switch", "1");
     option_parser_register(opp, "-page_table_walker_enable_32_bit", option_dtype::OPT_BOOL, &enable_32_bit, "using 32 bit address space not 64", "0");
-
+    option_parser_register(opp, "-page_table_walker_using_new_lru", option_dtype::OPT_BOOL, &using_new_lru, "using new lru", "0");
+    option_parser_register(opp, "-page_table_walker_i1_position", option_dtype::OPT_UINT32, &i1_position, "i1_position", "1");
+    option_parser_register(opp, "-page_table_walker_i2_position", option_dtype::OPT_UINT32, &i2_position, "i2_position", "6");
+    option_parser_register(opp, "-page_table_walker_i3_position", option_dtype::OPT_UINT32, &i3_position, "i3_position", "12");
 }
 bool latency_queue::free() const
 {
@@ -130,6 +133,7 @@ mem_fetch *page_table_walker::recv_probe() const
 }
 
 real_page_table_walker::real_page_table_walker(page_table_walker_config m_config) : m_config(m_config),
+                                                                                    new_tag_arrays(m_config.cache_size),
                                                                                     m_tag_arrays(m_config.cache_size * m_config.cache_assoc),
                                                                                     m_mshr(new mshr_table(m_config.mshr_size, m_config.mshr_max_merge)),
                                                                                     access_times(0),
@@ -141,6 +145,7 @@ real_page_table_walker::real_page_table_walker(page_table_walker_config m_config
     {
         m_tag_arrays[i] = new line_cache_block();
     }
+
     for (unsigned i = 0; i < m_config.waiting_queue_size; i++)
     {
     }
@@ -275,7 +280,14 @@ void real_page_table_walker::cycle()
         {
             auto child_mf = std::get<1>(working_walker[mf]);
             access_times++;
-            auto result = access(child_mf); //that will chage the status of working worker//that will access the cache
+            tlb_result result;
+            if (m_config.using_new_lru)
+                result = access<2>(child_mf); //that will chage the status of working worker//that will access the cache
+            else
+            {
+                result = access<1>(child_mf);
+            }
+
             switch (result)
             {
             case tlb_result::hit:
@@ -525,142 +537,6 @@ void real_page_table_walker::cycle()
 void page_table_walker_config::init()
 {
     global_bit = enable_32_bit ? 32 : 64;
-}
-tlb_result real_page_table_walker::access(mem_fetch *child_mf) //start to redesin the LRU replacement poly
-{
-    auto parent_mf = child_mf->pw_origin;
-    assert(std::get<0>(working_walker[parent_mf]) != page_table_level::L1_LEAF); //leaf shouldn't access cache
-    if (child_mf == nullptr)
-    {
-        throw std::runtime_error("accessed mf cann't be null");
-    }
-    else
-    {
-        /* code */
-        auto addr = child_mf->get_physic_addr();
-        auto n_set = m_config.cache_size;
-        auto n_assoc = m_config.cache_assoc;
-
-        // get the set_index and tag for searching the tag array.
-        auto set_index = (addr >> 3) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
-        auto tag = addr & (~static_cast<addr_type>(8 - 1));               //only need the bits besides page offset
-        assert(tag == addr);
-        auto block_addr = addr >> 3;
-        auto start = m_tag_arrays.begin() + n_assoc * set_index;
-        auto end = start + n_assoc;
-        //to find a place to access
-        auto has_free_line = false;
-
-        unsigned long long oldest_access_time = gpu_sim_cycle + gpu_tot_sim_cycle;
-        auto time = oldest_access_time;
-        decltype(start) free_line;
-        decltype(start) hit_line;
-        decltype(start) last_line;
-        auto mask = child_mf->get_access_sector_mask();
-        bool all_reserved = true;
-
-        for (; start < end; start++)
-        {
-            if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
-            {
-                auto status = (*start)->get_status(mask);
-                if (status != RESERVED) //for eviction
-                {
-                    assert(status == VALID);
-                    all_reserved = false;
-                    if ((*start)->get_last_access_time() < oldest_access_time)
-                    {
-                        oldest_access_time = (*start)->get_last_access_time();
-                        last_line = start;
-                    }
-                }
-                else
-                {
-                    assert(time - (*start)->get_alloc_time() < 50000);
-                }
-
-                if ((*start)->m_tag == tag) //ok we find
-                {
-
-                    auto status = (*start)->get_status(mask);
-                    switch (status)
-                    {
-                    case RESERVED:
-                    {
-                        unsigned reason;
-                        if (m_mshr->full(block_addr, reason))
-                        {
-                            printdbg_tlb("reserved! and mshr full\n");
-                            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
-                            return tlb_result::resfail;
-                        }
-                        else
-                        {
-                            printdbg_tlb("hit reserved! add to mfshr\n");
-
-                            m_mshr->add<2>(block_addr, child_mf); //not new
-
-                            //ready_to_send.pop();
-                            (*start)->set_last_access_time(time, mask);
-                            hit_reserved_times++;
-                            return tlb_result::hit_reserved;
-                        }
-                        break;
-                    }
-                    case VALID:
-                    {
-                        printdbg_tlb("child mf hit: mf:%llX\n", child_mf->get_virtual_addr());
-                        hit_times++;
-                        return tlb_result::hit;
-                        break;
-                    }
-                    case MODIFIED:
-                    {
-
-                        throw std::runtime_error("tlb cache can't be modified, it's read only!");
-                        return tlb_result::resfail;
-                        break;
-                    }
-                    default:
-                        throw std::runtime_error("error");
-                        return tlb_result::resfail;
-                        break;
-                    }
-                    break;
-                }
-            }
-            else
-            { //any time find the valid line, get it!
-                all_reserved = false;
-                if (has_free_line == false)
-                {
-                    has_free_line = true;
-                    free_line = start;
-                }
-            }
-        }
-        if (all_reserved)
-        {
-            resfail_all_res_times++;
-            return tlb_result::resfail;
-        }
-        // when run to here, means no hit line found,It's a miss;
-        unsigned reason;
-        if (m_mshr->full(block_addr, reason))
-        {
-            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
-            return tlb_result::resfail;
-        }
-        auto next_line = has_free_line ? free_line : last_line;
-        (*next_line)->allocate(tag, block_addr, time, mask);
-        m_mshr->add<1>(block_addr, child_mf);
-        miss_queue.push(child_mf);
-        assert(miss_queue.size() < 10);
-        //ready_to_send.pop();
-        miss_times++;
-        //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
-        return tlb_result::miss;
-    }
 }
 
 bool real_page_table_walker::send(mem_fetch *mf)
