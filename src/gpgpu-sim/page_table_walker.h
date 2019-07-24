@@ -293,7 +293,7 @@ public:
         fprintf(file, "range cache access: %llu\n", range_cache_access);
         fprintf(file, "range cache hit: %llu\n", range_cache_hit);
         fprintf(file, "range cache miss: %llu\n", range_cache_miss);
-        fprintf(file, "range max size: %lu\n", m_config.m_range_size);
+        fprintf(file, "range max size: %u\n", m_config.m_range_size);
         unsigned long all_ranges = 0;
         auto set = global_page_manager->m_range_page_table.get_m_set();
         for (auto entry : set)
