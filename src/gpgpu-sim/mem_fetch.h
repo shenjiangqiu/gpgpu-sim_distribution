@@ -54,6 +54,13 @@ public:
 //for debug
     //unsigned magic_number;
     //bool is_in_response_queue;
+    /* bool l1tlb_hit=false;
+    bool l2tlb_hit=false;
+    bool range_hit=false;
+    bool pw4_hit=false;
+    bool pw3_hit=false;
+    bool pw2_hit=false;
+    bool pw1_hit=false; */
     mem_fetch* pw_origin;
     mem_fetch* get_copy(){
         #ifdef TLBDEBUG
