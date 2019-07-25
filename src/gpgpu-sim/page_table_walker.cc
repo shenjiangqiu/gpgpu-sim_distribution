@@ -220,7 +220,10 @@ void real_page_table_walker::cycle()
             auto new_mf = std::get<1>(mf)->get_copy();
             total_mf++;
             assert(total_mf <= m_config.walker_size);
-
+            auto level_debug=std::get<3>(mf);
+            if(level_debug==page_table_level::L1_LEAF){
+                int bbb=100;
+            }
             set_pw_mf(new_mf, std::get<3>(mf), std::get<1>(mf));
 
             //assert(working_walker.find(std::get<1>(mf)) == working_walker.end());
@@ -260,11 +263,11 @@ void real_page_table_walker::cycle()
     if (!ready_to_send.empty()) //it's from working set to cache or miss queue.
     {
         auto mf = ready_to_send.front();
-        if (std::get<0>(working_walker[mf]) == page_table_level::L1_LEAF)
-        { //send leaf access to l2 cache
+        if (std::get<0>(working_walker[mf]) == page_table_level::L1_LEAF || m_config.cache_assoc == 0 || m_config.cache_size == 0) //bypass pw cache
+        {                                                                                                                          //send leaf access to l2 cache
             auto next_mf = std::get<1>(working_walker[mf]);
             assert(std::get<2>(working_walker[mf]) == false);
-            set_pw_mf(next_mf, page_table_level::L1_LEAF, mf);
+            //set_pw_mf(next_mf, page_table_level::L1_LEAF, mf);
             //assert(total_mf<m_config.walker_size);
 
             auto &target_status = working_walker[mf];
@@ -392,7 +395,7 @@ void real_page_table_walker::cycle()
         else
         {
 
-            printdbg_ICNT("ICNT:L2 to Mem:try to send but not free,To Mem:%u\n", (unsigned)(mf->get_sub_partition_id()+ global_n_cores + 1));
+            printdbg_ICNT("ICNT:L2 to Mem:try to send but not free,To Mem:%u\n", (unsigned)(mf->get_sub_partition_id() + global_n_cores + 1));
 
             printdbg_PW("INCT not has buffer!\n");
         }
@@ -466,7 +469,73 @@ void real_page_table_walker::cycle()
                 //assert(response_queue.size() < 10);
             }
             else
-                fill(child_mf);
+            {
+                if (m_config.cache_assoc == 0 || m_config.cache_size == 0) //bypass pw  cache
+                {
+                    //auto child_mf = m_mshr->next_access();
+                    auto mf_origin = child_mf->pw_origin;
+                    assert(mf_origin != NULL);
+                    auto &status = working_walker[mf_origin]; //fix bug, that should be reference!!!!!!
+                    auto &level = std::get<0>(status);        //attention! it's reference not copy!!!
+                    printdbg_NEI("mshr ready!\n");
+                    printdbg_NEI("before scan\n");
+                    printdbg_NEI("current waiting queue:\n");
+                    PRINT_WAITINGBUFFER(waiting_buffer);
+                    printdbg_NEI("current walking wakjer:\n");
+                    PRINT_WORINGWORKER(working_walker);
+                    //non-l1 come back
+                    if (m_config.enable_neighborhood)
+                    {
+                        for (auto &mf_in_waiting : waiting_buffer)
+                        {
+                            if (is_neighbor(std::get<1>(mf_in_waiting), mf_origin, level, m_config.enable_32_bit ? 32 : 64))
+                            {
+                                if (is_neighbor(std::get<1>(mf_in_waiting), mf_origin, get_next_level(level), m_config.enable_32_bit ? 32 : 64))
+                                {
+                                    std::get<0>(mf_in_waiting) = true;
+                                    std::get<2>(mf_in_waiting) = true;
+                                    std::get<3>(mf_in_waiting) = get_next_level(level);
+                                }
+                                else
+                                { 
+                                    std::get<0>(mf_in_waiting) = true;
+                                    std::get<2>(mf_in_waiting) = false;
+                                    std::get<3>(mf_in_waiting) = get_next_level(level);
+                                }
+                            }
+                        }
+                    }
+                    printdbg_NEI("after scan\n");
+                    printdbg_NEI("current waiting queue:\n");
+                    PRINT_WAITINGBUFFER(waiting_buffer);
+                    printdbg_NEI("current walking wakjer:\n");
+                    PRINT_WORINGWORKER(working_walker);
+
+                    delete child_mf;
+                    total_mf--;
+
+                    assert(level != page_table_level::L1_LEAF);
+
+                    //it is not the last level, we need keep going.
+                    //1,change working status,to next level, to next mf, and not outgoing
+                    level = get_next_level(level); //change to next level,1
+
+                    auto next_mf = mf_origin->get_copy();
+                    total_mf++;
+
+                    assert(total_mf <= m_config.walker_size);
+
+                    set_pw_mf(next_mf, level, mf_origin);
+
+                    std::get<1>(status) = next_mf; //set next mf;/2
+                    assert(std::get<2>(status) == true);
+                    std::get<2>(status) = false; //set next outgoing bit/3
+                    ready_to_send.push(mf_origin);
+                    assert(ready_to_send.size() <= m_config.walker_size);
+                }
+                else
+                    fill(child_mf);
+            }
         }
     }
     while (m_mshr->access_ready())
