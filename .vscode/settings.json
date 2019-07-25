@@ -58,6 +58,7 @@
         "set": "cpp",
         "optional": "cpp",
         "string": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "*.tup": "cpp"
     }
 }
