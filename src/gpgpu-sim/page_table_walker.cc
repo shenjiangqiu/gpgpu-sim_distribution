@@ -392,7 +392,7 @@ void real_page_table_walker::cycle()
         else
         {
 
-            printdbg_ICNT("ICNT:L2 to Mem:try to send but not free,To Mem:%u\n", (unsigned)(mf->get_sub_partition_id(); + global_n_cores + 1));
+            printdbg_ICNT("ICNT:L2 to Mem:try to send but not free,To Mem:%u\n", (unsigned)(mf->get_sub_partition_id()+ global_n_cores + 1));
 
             printdbg_PW("INCT not has buffer!\n");
         }

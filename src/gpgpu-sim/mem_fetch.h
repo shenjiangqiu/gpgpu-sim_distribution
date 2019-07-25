@@ -85,9 +85,6 @@ public:
    ~mem_fetch();
    void reset_raw_addr();
    bool finished_tlb;
-    #ifdef TLBDEBUG
-    unsigned icnt_from;
-    #endif
    void set_status( enum mem_fetch_status status, unsigned long long cycle );
    void set_reply() 
    { 

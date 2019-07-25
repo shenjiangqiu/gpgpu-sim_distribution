@@ -56,7 +56,7 @@ void l2_tlb_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-l2tlb_page_size", option_dtype::OPT_UINT32, &m_page_size, "the page size", "4096");
     option_parser_register(opp, "-l2tlb_pw_size", option_dtype::OPT_UINT32, &m_pw_size, "the size of pw size", "16");
     option_parser_register(opp, "-l2tlb_pw_latency", option_dtype::OPT_UINT32, &m_pw_latency, "the latency of pw ", "500");
-    option_parser_register(opp, "-l2tlb_recv_buffer_size", option_dtype::OPT_UINT32, &recv_buffer_size, "the size of recv buffer from icnt", "128");
+    option_parser_register(opp, "-l2tlb_recv_buffer_size", option_dtype::OPT_UINT32, &recv_buffer_size, "the size of recv buffer from icnt", "0");
 }
 void l2_tlb::init()
 {
@@ -285,7 +285,7 @@ void l2_tlb::cycle()
     mem_fetch *mf = nullptr;
     if (global_tlb_icnt->ready(m_config.m_icnt_index, gpu_sim_cycle + gpu_tot_sim_cycle))
     {
-        if (m_recv_buffer.size() < m_config.recv_buffer_size || global_tlb_icnt->recv_probe(m_config.m_icnt_index)->pw_origin != NULL) //recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
+        if (m_config.recv_buffer_size==0 or m_recv_buffer.size() < m_config.recv_buffer_size or global_tlb_icnt->recv_probe(m_config.m_icnt_index)->pw_origin != NULL) //recv the request ,if it is a pw requst, send to pwalker, if it's a mf from l1.send it to the recv queue
         {
             // mf = static_cast<mem_fetch *>(::icnt_pop(m_config.m_icnt_index));
             if (global_tlb_icnt->ready(m_config.m_icnt_index, gpu_sim_cycle + gpu_tot_sim_cycle))
