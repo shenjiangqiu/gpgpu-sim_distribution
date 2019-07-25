@@ -10,6 +10,42 @@
 #include <utility>
 #include <memory>
 #include <unordered_set>
+template <typename Iter>
+Iter find_entry_to_fill(Iter start, Iter end)
+{
+    Iter fill_entry;
+    bool have_free_line = false;
+    Iter free_line;
+    unsigned long long oldest_access_time = gpu_sim_cycle + gpu_tot_sim_cycle;
+    while (start != end)
+    {
+
+        if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
+        {
+
+            if ((*start)->get_last_access_time() < oldest_access_time)
+            {
+                oldest_access_time = (*start)->get_last_access_time();
+                fill_entry = start;
+            }
+        }
+        else
+        { //any time find the valid line, get it!
+            //all_reserved = false;
+            if (have_free_line == false)
+            {
+                have_free_line = true;
+                free_line = start;
+            }
+        }
+        start++;
+    }
+    if (have_free_line)
+        return free_line;
+    else
+        return fill_entry;
+}
+
 class l1_tlb_config
 {
 public:
@@ -27,6 +63,7 @@ public:
     unsigned n_mshr_max_merge;
     unsigned response_queue_size;
     unsigned miss_queue_size;
+    bool allocate_on_fill;
 };
 
 enum class tlb_result
@@ -47,7 +84,7 @@ public:
     {
         for (unsigned i = 0; i < m_config.n_sets * m_config.n_associate; i++)
         {
-            assert(m_tag_arrays[i]->get_status(mem_access_sector_mask_t())!=RESERVED);
+            assert(m_tag_arrays[i]->get_status(mem_access_sector_mask_t()) != RESERVED);
             m_tag_arrays[i]->set_status(INVALID, mem_access_sector_mask_t());
         }
     }
@@ -56,14 +93,38 @@ public:
     l1_tlb(l1_tlb &other) = delete;
     l1_tlb(l1_tlb &&other) = delete;
     void init();
-    tlb_result access(mem_fetch *mf, unsigned long long time);
+    // template<int type>
+    tlb_result access(mem_fetch *mf, unsigned long long time)
+    {
+        if (m_config.allocate_on_fill)
+        {
+            return access_alloc_on_fill(mf, time);
+        }
+        else
+        {
+            return access_alloc_on_miss(mf, time);
+        }
+    }
+
+    tlb_result access_alloc_on_miss(mem_fetch *mf, unsigned long long time);
+    tlb_result access_alloc_on_fill(mem_fetch *mf, unsigned long long time);
+
     mem_fetch *get_top_response();
     void pop_response();
     bool reponse_empty();
     void cycle();
     bool is_outgoing(mem_fetch *mf);
     void del_outgoing(mem_fetch *mf);
-    void fill(mem_fetch *mf, unsigned long long time);
+    void fill(mem_fetch *mf, unsigned long long time){
+        if(m_config.allocate_on_fill){
+            fill_allocate_on_fill(mf,time);
+        }else{
+            fill_allocate_on_miss(mf,time);
+        }
+    }
+    void fill_allocate_on_miss(mem_fetch *mf, unsigned long long time);
+    void fill_allocate_on_fill(mem_fetch *mf, unsigned long long time);
+
     unsigned outgoing_size();
     void print_stat(FILE *file) const
     {
@@ -79,7 +140,7 @@ public:
 
 protected:
     // unsigned long long latency_dist[50]={0};
-    
+
     unsigned id;
     l1_tlb_config m_config;       //init in constructor
     page_manager *m_page_manager; //init in constructor

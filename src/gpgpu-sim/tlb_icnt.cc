@@ -12,6 +12,9 @@ void tlb_icnt::send(unsigned int from, unsigned int to, mem_fetch *mf, unsigned 
 {
     mf->icnt_from = from;
     mf->icnt_to = to;
+    /* if (mf->virtual_addr>>12 == 802824 && mf->get_tpc() == 2){
+        printdbg("tlb_icnt recive\n");
+    } */
     total_inside++;
     send_queue[to].push(std::make_pair(mf, time));
 }
@@ -31,7 +34,7 @@ mem_fetch *tlb_icnt::recv(unsigned int to)
         throw std::runtime_error("Queue empty!");
     auto ret = q.front().first;
     total_inside--;
-    assert(total_inside>=0);
+    assert(total_inside >= 0);
     assert(ret);
     q.pop();
     return ret;

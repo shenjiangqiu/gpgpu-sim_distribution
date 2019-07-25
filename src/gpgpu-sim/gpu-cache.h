@@ -228,7 +228,7 @@ struct line_cache_block: public cache_block_t  {
 		}
 
 
-private:
+
 	    unsigned         m_alloc_time;
 	    unsigned         m_last_access_time;
 	    unsigned         m_fill_time;
@@ -874,17 +874,6 @@ public:
     template <int N = 0>//I add this template is to test the access behavior is correct,
     void add(new_addr_type block_addr, mem_fetch *mf)
     {
-        if (N != 0)
-        {
-            if (N == 1)
-            {
-                assert(m_data.find(block_addr) == m_data.end());
-            }
-            else
-            {
-                assert(m_data.find(block_addr) != m_data.end());
-            }
-        }
         m_data[block_addr].m_list.push_back(mf);
         assert(m_data.size() <= m_num_entries);
         assert(m_data[block_addr].m_list.size() <= m_max_merged);

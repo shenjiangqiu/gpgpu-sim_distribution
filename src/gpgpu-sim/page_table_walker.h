@@ -70,6 +70,7 @@ struct page_table_walker_config
     bool enable_range_pt;
     bool enable_32_bit;
     bool using_new_lru;
+    bool allocate_on_fill;
     unsigned i1_position;
     unsigned i2_position;
     unsigned i3_position;
@@ -99,7 +100,81 @@ public:
     virtual mem_fetch *recv() override;             //recv and pop override;
     virtual mem_fetch *recv_probe() const override; //recv not
     template <int lru_type>
-    tlb_result access(mem_fetch *child_mf) //start to redesin the LRU replacement poly
+    tlb_result access(mem_fetch *child_mf)
+    {
+        if (m_config.allocate_on_fill)
+            return access_allocate_on_fill<lru_type>(child_mf);
+        else
+            return access_allocate_on_miss<lru_type>(child_mf);
+    }
+    template <int lru_type>
+    tlb_result access_allocate_on_fill(mem_fetch *child_mf) //start to redesin the LRU replacement poly
+    {
+        auto parent_mf = child_mf->pw_origin;
+        auto ilevel = parent_mf->trans_important_level;
+
+        // assert(mf != nullptr);
+
+        /* code */
+
+        //printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+        access_times++;
+        auto addr = child_mf->get_physic_addr();
+        auto n_set = m_config.cache_size;
+        auto n_assoc = m_config.cache_assoc;
+
+        // get the set_index and tag for searching the tag array.
+        auto set_index = (addr >> 3) & static_cast<addr_type>(n_set - 1); //first get the page number, then get the cache index.
+        auto tag = addr & (~static_cast<addr_type>(8 - 1));               //only need the bits besides page offset
+        assert(tag == addr);
+        auto block_addr = addr >> 3;
+        unsigned long long oldest_access_time = gpu_sim_cycle + gpu_tot_sim_cycle;
+        auto time = oldest_access_time;
+        auto mask = child_mf->get_access_sector_mask();
+        // bool all_reserved = true;
+        auto start = m_tag_arrays.begin() + n_assoc * set_index;
+                auto end = start + n_assoc;
+        for (; start < end; start++)
+        {
+            if (!(*start)->is_invalid_line())
+            {
+                if ((*start)->m_tag == tag) //ok we find// this is what the identity entry/try to find that entry
+                {
+
+                    // all_reserved = false;
+                   
+                    //m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+
+                    //assert(m_response_queue.size() < 100);
+                    (*start)->set_last_access_time(time, mask);
+                    hit_times++;
+                    return tlb_result::hit;
+                }
+            }
+        }
+        // when run to here, means no hit line found,It's a miss;
+
+        unsigned reason;
+        if (m_mshr->full(block_addr, reason))
+        {
+            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+            return tlb_result::resfail;
+        }
+        
+        //printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+        bool already_in_mshr = m_mshr->probe(block_addr);
+
+        m_mshr->add<1>(block_addr, child_mf);
+        if (!already_in_mshr)
+            miss_queue.push(child_mf);
+        // outgoing_mf.insert(mf);
+        //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
+        miss_times++;
+        return tlb_result::miss;
+    }
+
+    template <int lru_type>
+    tlb_result access_allocate_on_miss(mem_fetch *child_mf) //start to redesin the LRU replacement poly
     {
         auto parent_mf = child_mf->pw_origin;
         auto ilevel = parent_mf->trans_important_level;
@@ -189,6 +264,8 @@ public:
                             {
                                 printdbg_tlb("child mf hit: mf:%llX\n", child_mf->get_virtual_addr());
                                 hit_times++;
+                                (*start)->set_last_access_time(time, mask);
+
                                 return tlb_result::hit;
                                 break;
                             }
@@ -319,7 +396,13 @@ public:
     }
 
 private:
-    void fill(mem_fetch *mf); //fill pw cache;
+    void fill(mem_fetch *mf){
+        if(m_config.allocate_on_fill) fill_allocate_on_fill(mf);
+        else fill_allocate_on_miss(mf);
+    }
+    void fill_allocate_on_fill(mem_fetch *mf); //fill pw cache;
+    void fill_allocate_on_miss(mem_fetch *mf); //fill pw cache;
+
     page_table_walker_config m_config;
     std::vector<std::list<cache_block_t *>> new_tag_arrays; //new algorithms to replace lru!
 

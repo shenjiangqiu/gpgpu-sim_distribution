@@ -91,7 +91,9 @@ void page_table_walker_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-page_table_walker_using_new_lru", option_dtype::OPT_BOOL, &using_new_lru, "using new lru", "0");
     option_parser_register(opp, "-page_table_walker_i1_position", option_dtype::OPT_UINT32, &i1_position, "i1_position", "1");
     option_parser_register(opp, "-page_table_walker_i2_position", option_dtype::OPT_UINT32, &i2_position, "i2_position", "6");
+
     option_parser_register(opp, "-page_table_walker_i3_position", option_dtype::OPT_UINT32, &i3_position, "i3_position", "12");
+    option_parser_register(opp, "-page_table_walker_allocate_on_fill", option_dtype::OPT_BOOL, &allocate_on_fill, "allocate on fill", "0");
 }
 bool latency_queue::free() const
 {
@@ -138,8 +140,9 @@ real_page_table_walker::real_page_table_walker(page_table_walker_config m_config
                                                                                     m_mshr(new mshr_table(m_config.mshr_size, m_config.mshr_max_merge)),
                                                                                     access_times(0),
                                                                                     hit_times(0),
-                                                                                    miss_times(0),
-                                                                                    m_range_cache_size(m_config.m_range_size)
+                                                                                    m_range_cache_size(m_config.m_range_size),
+                                                                                    miss_times(0)
+
 {
     for (unsigned i = 0; i < m_config.cache_size * m_config.cache_assoc; i++)
     {
@@ -220,10 +223,11 @@ void real_page_table_walker::cycle()
             auto new_mf = std::get<1>(mf)->get_copy();
             total_mf++;
             assert(total_mf <= m_config.walker_size);
-            auto level_debug=std::get<3>(mf);
-            if(level_debug==page_table_level::L1_LEAF){
-                int bbb=100;
-            }
+            auto level_debug = std::get<3>(mf);
+            /* if (level_debug == page_table_level::L1_LEAF)
+            {
+                int bbb = 100;
+            } */
             set_pw_mf(new_mf, std::get<3>(mf), std::get<1>(mf));
 
             //assert(working_walker.find(std::get<1>(mf)) == working_walker.end());
@@ -497,7 +501,7 @@ void real_page_table_walker::cycle()
                                     std::get<3>(mf_in_waiting) = get_next_level(level);
                                 }
                                 else
-                                { 
+                                {
                                     std::get<0>(mf_in_waiting) = true;
                                     std::get<2>(mf_in_waiting) = false;
                                     std::get<3>(mf_in_waiting) = get_next_level(level);
@@ -672,7 +676,7 @@ mem_fetch *real_page_table_walker::recv_probe() const
     return mf;
 }
 
-void real_page_table_walker::fill(mem_fetch *mf)
+void real_page_table_walker::fill_allocate_on_miss(mem_fetch *mf)
 {
     auto addr = mf->get_physic_addr();
     auto n_set = m_config.cache_size;
@@ -704,4 +708,27 @@ void real_page_table_walker::fill(mem_fetch *mf)
     }
     assert(done);
     return;
+}
+void real_page_table_walker::fill_allocate_on_fill(mem_fetch *mf)
+{
+    auto addr = mf->get_physic_addr();
+    auto n_set = m_config.cache_size;
+    auto n_assoc = m_config.cache_assoc;
+
+    // get the set_index and tag for searching the tag array.
+    assert((n_set & (n_set - 1)) == 0);
+    auto set_index = (addr >> 3) & (n_set - 1); //first get the page number, then get the cache index.
+    auto tag = addr & ~(8 - 1);                 //only need the bits besides page offset
+    auto block_addr = addr >> 3;
+    bool has_atomic;
+    m_mshr->mark_ready(block_addr, has_atomic);
+    auto start = m_tag_arrays.begin() + set_index * n_assoc;
+    auto end = start + n_assoc;
+    auto mask = mf->get_access_sector_mask();
+
+    auto fill_entry = find_entry_to_fill(start, end);
+    (*fill_entry)->allocate(tag, block_addr, gpu_sim_cycle + gpu_tot_sim_cycle, mask);
+
+    (*fill_entry)->fill(gpu_sim_cycle + gpu_tot_sim_cycle, mask);
+    //(*fill_entry)->set_last_access_time(time,mem_access_sector_mask_t());//otherwise the  access time will be 0!
 }

@@ -2086,6 +2086,9 @@ bool ldst_unit::memory_cycle(mem_stage_stall_type &stall_reason, mem_stage_acces
         return true;
     }
     auto mf = m_l1_tlb->get_top_response();
+   /*  if (mf->virtual_addr>>12 == 802824 && mf->get_tpc() == 2){
+        printdbg("mem start to cycle\n");
+    } */
     auto inst = mf->get_inst();
 
     auto access_size = mf->get_access_size();
@@ -2135,6 +2138,9 @@ bool ldst_unit::memory_cycle(mem_stage_stall_type &stall_reason, mem_stage_acces
     else
     { //not bypassing
         assert(CACHE_UNDEFINED != inst.cache_op);
+        /* if (mf->virtual_addr>>12 == 802824 && mf->get_tpc() == 2){
+            printdbg("send to l1D cache! is in l1tlb?%s\n",m_l1_tlb->is_outgoing(mf)?"YES":"NO");
+        } */
         process_memory_access_queue_l1cache(m_L1D, mf);
     }
     if (!inst.accessq_empty() && stall_cond == NO_RC_FAIL)
@@ -2159,6 +2165,9 @@ bool ldst_unit::response_buffer_full() const
 void ldst_unit::fill(mem_fetch *mf)
 {
     mf->set_status(IN_SHADER_LDST_RESPONSE_FIFO, gpu_sim_cycle + gpu_tot_sim_cycle);
+    /* if (mf->virtual_addr>>12 == 802824 && mf->get_tpc() == 2){
+        printdbg("ldst fill\n");
+    } */
     m_response_fifo.push_back(mf);
 }
 
@@ -2763,6 +2772,8 @@ void ldst_unit::cycle()
             printdbg_tlb("m_l1_tlb accept this mf:%llX\n", mf->get_physic_addr());
             m_l1_tlb->del_outgoing(mf);
             //mf will fill the l1 tlb cache, and return to tlb_response queue;
+            /* if (mf->virtual_addr >> 12 == 802824 && mf->get_tpc() == 2)
+                printdbg("\n\ncore fill l1 tlb\n\n"); */
             m_l1_tlb->fill(mf, gpu_sim_cycle + gpu_tot_sim_cycle);
             /*
             fill() mark mshr, set cache line,
@@ -4706,6 +4717,9 @@ void simt_core_cluster::icnt_cycle()
             // data response
             if (!m_core[cid]->ldst_unit_response_buffer_full())
             {
+                /* if (mf->virtual_addr>>12 == 802824 && mf->get_tpc() == 2){
+                    printdbg("cluster send  to ldst\n");
+                } */
                 m_response_fifo.pop_front();
                 m_memory_stats->memlatstat_read_done(mf);
                 m_core[cid]->accept_ldst_unit_response(mf); //push to ldst queue, then we recognice the tlb traffic and the data traffic.

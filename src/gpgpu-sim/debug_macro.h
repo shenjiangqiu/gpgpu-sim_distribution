@@ -22,6 +22,8 @@
 #undef NEIDEBUG
 #undef PTRNGDEBUG
 #undef IMPCDEBUG
+extern unsigned long long gpu_sim_cycle;
+extern unsigned long long gpu_tot_sim_cycle;
 
 
 #define printdbg(...)                              \

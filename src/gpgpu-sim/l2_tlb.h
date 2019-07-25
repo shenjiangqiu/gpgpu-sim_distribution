@@ -38,6 +38,7 @@ private:
     unsigned m_pw_size;
     unsigned m_pw_latency;
     page_table_walker_config m_page_table_walker_config;
+    unsigned allocate_on_fill;
     //TODO add pw config, add regoption add init
 };
 
@@ -57,14 +58,27 @@ public:
     }
     l2_tlb(l2_tlb_config m_config);
     void init();
-    tlb_result access(mem_fetch *mf, unsigned long long  time);
+    tlb_result access(mem_fetch *mf, unsigned long long  time){
+        if(m_config.allocate_on_fill) return access_allocate_on_fill(mf,time);
+        else return access_allocate_on_miss(mf,time);
+    }
+    tlb_result access_allocate_on_miss(mem_fetch *mf, unsigned long long  time);
+
+    tlb_result access_allocate_on_fill(mem_fetch *mf, unsigned long long  time);
+
     mem_fetch *get_top_response();
     void pop_response();
     bool reponse_empty();
     void cycle();
-    bool is_outgoing(mem_fetch *mf);
-    void del_outgoing(mem_fetch *mf);
-    void fill(mem_fetch *mf, unsigned long long time);
+    // bool is_outgoing(mem_fetch *mf);
+    // void del_outgoing(mem_fetch *mf);
+    void fill(mem_fetch *mf, unsigned long long time){
+        if(m_config.allocate_on_fill) fill_allocate_on_fill(mf,time);
+        else fill_allocate_on_miss(mf,time);
+    }
+    void fill_allocate_on_miss(mem_fetch *mf, unsigned long long time);
+    void fill_allocate_on_fill(mem_fetch *mf, unsigned long long time);
+    
 
     void print_stat(FILE *file) const
     {
@@ -88,7 +102,7 @@ protected:
     std::deque<mem_fetch *> m_miss_queue;
     //enum mem_fetch_status m_miss_queue_status;
     std::deque<mem_fetch *> m_response_queue;
-    std::set<mem_fetch *> outgoing_mf; //we do not use multiple set
+    // std::set<mem_fetch *> outgoing_mf; //we do not use multiple set
     std::queue<mem_fetch *> m_recv_buffer;
 
     ull access_times = 0;
