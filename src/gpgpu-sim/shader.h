@@ -41,6 +41,7 @@
 #include <utility>
 #include <algorithm>
 #include <deque>
+#include<queue>
 
 //#include "../cuda-sim/ptx.tab.h"
 
@@ -1240,6 +1241,7 @@ class cache_t;
 
 class ldst_unit: public pipelined_simd_unit {
 public:
+    std::queue<mem_fetch*> ideal_queue;
     ldst_unit( mem_fetch_interface *icnt,
                shader_core_mem_fetch_allocator *mf_allocator,
                shader_core_ctx *core, 
@@ -1396,6 +1398,8 @@ const char* const pipeline_stage_name_decode[] = {
 
 struct shader_core_config : public core_config
 {
+    bool ideal_l1tlb;
+
     shader_core_config(){
 	pipeline_widths_string = NULL;
     }
