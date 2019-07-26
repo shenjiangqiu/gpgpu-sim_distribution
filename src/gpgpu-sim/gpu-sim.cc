@@ -238,7 +238,7 @@ void shader_core_config::reg_options(class OptionParser * opp)
    m_L1TLB_config.reg_option(opp);
    m_L1ITLB_config.reg_option(opp);
    option_parser_register(opp, "-ideal_l1tlb", OPT_BOOL, &ideal_l1tlb, 
-                   "enable ideal  l1tlb", "1");
+                   "enable ideal  l1tlb", "0");
 
     option_parser_register(opp, "-gpgpu_simd_model", OPT_INT32, &model, 
                    "1 = post-dominator", "1");

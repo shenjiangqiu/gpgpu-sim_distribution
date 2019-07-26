@@ -45,7 +45,7 @@ Iter find_entry_to_fill(Iter start, Iter end)
     else
         return fill_entry;
 }
-
+struct shader_core_config;
 class l1_tlb_config
 {
 public:
@@ -64,6 +64,7 @@ public:
     unsigned response_queue_size;
     unsigned miss_queue_size;
     bool allocate_on_fill;
+    shader_core_config* m_shader_config;
 };
 
 enum class tlb_result
@@ -140,7 +141,7 @@ public:
 
 protected:
     // unsigned long long latency_dist[50]={0};
-
+    std::set<addr_type> block_addr_set;
     unsigned id;
     l1_tlb_config m_config;       //init in constructor
     page_manager *m_page_manager; //init in constructor

@@ -3,6 +3,7 @@
 #include "gpu-cache.h"
 #include "icnt_wrapper.h"
 #include <deque>
+#include "shader.h"
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
 
@@ -102,6 +103,20 @@ tlb_result l1_tlb::access_alloc_on_miss(mem_fetch *mf, unsigned long long time)
         auto mask = mf->get_access_sector_mask();
         bool all_reserved = true;
         printdbg_tlb("l1 access mf:%llX\n", mf->get_virtual_addr());
+
+        if (m_config.m_shader_config->ideal_l1tlb)
+        {
+            static std::set<addr_type> block_addr_set;
+            if (block_addr_set.find(block_addr) != block_addr_set.end())
+            {
+                printdbg_tlb("push to response queu: mf: %llX\n", mf->get_virtual_addr());
+                mf->finished_tlb = true;
+                m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+                hit_times++;
+                //(*start)->set_last_access_time(time, mask);
+                return tlb_result::hit;
+            }
+        }
         for (; start < end; start++)
         {
             if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
@@ -250,6 +265,20 @@ tlb_result l1_tlb::access_alloc_on_fill(mem_fetch *mf, unsigned long long time)
         auto mask = mf->get_access_sector_mask();
         // bool all_reserved = true;
         printdbg_tlb("l1 access mf:%llX\n", mf->get_virtual_addr());
+        if (m_config.m_shader_config->ideal_l1tlb)
+        {
+            //static std::set<addr_type> block_addr_set;
+            if (block_addr_set.find(block_addr) != block_addr_set.end())
+            {
+                printdbg_tlb("push to response queu: mf: %llX\n", mf->get_virtual_addr());
+                mf->finished_tlb = true;
+                m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+                hit_times++;
+                //(*start)->set_last_access_time(time, mask);
+                return tlb_result::hit;
+            }
+        }
+
         for (; start < end; start++)
         {
             if (!(*start)->is_invalid_line()) //previouse bug: cant assume is_valid_line, that would filter reserved line out!!!
@@ -370,6 +399,9 @@ void l1_tlb::fill_allocate_on_miss(mem_fetch *mf, unsigned long long time)
     auto end = start + n_assoc;
     auto mask = mf->get_access_sector_mask();
     auto done = false;
+
+    block_addr_set.insert(block_addr);
+
     for (; start < end; start++)
     {
         if (!(*start)->is_invalid_line())
@@ -414,6 +446,8 @@ void l1_tlb::fill_allocate_on_fill(mem_fetch *mf, unsigned long long time)
     (*fill_entry)->allocate(tag, block_addr, time, mask);
 
     (*fill_entry)->fill(time, mask);
+    block_addr_set.insert(block_addr);
+
     //(*fill_entry)->set_last_access_time(time,mem_access_sector_mask_t());//otherwise the  access time will be 0!
 }
 unsigned int l1_tlb::outgoing_size()
