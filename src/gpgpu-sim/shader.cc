@@ -889,7 +889,7 @@ void shader_core_ctx::fetch() //redesign for tlb/translate
                         fix bug: at hit, don't directly push to instruction queue, that will insert twice;
                      */
 
-                    assert(m_l1I_tlb->outgoing_size() < 100);
+                    //assert(m_l1I_tlb->outgoing_size() < 100);
                     switch (result)
                     {
                     case tlb_result::hit:
@@ -903,7 +903,7 @@ void shader_core_ctx::fetch() //redesign for tlb/translate
                         //fflush(stderr);
                         //printdbg_PW("push mf: %llx\n",instruction_tlb_response_queue.front());
                         // assert(instruction_tlb_response_queue.front()->magic_number==0x12341234);
-                        assert(instruction_tlb_response_queue.size() < 100);
+                        //assert(instruction_tlb_response_queue.size() < 100);
 
                         m_last_warp_fetched = warp_id;
                         m_warp[warp_id].set_imiss_pending(); //that will keep until l1I return,may be just this cycle.
@@ -949,7 +949,7 @@ void shader_core_ctx::fetch() //redesign for tlb/translate
                 printdbg_PW("push mf:%p\n", mf);
                 // assert(mf->magic_number == 0x12341234);
 
-                assert(instruction_tlb_response_queue.size() < 100);
+                //assert(instruction_tlb_response_queue.size() < 100);
 
                 m_l1I_tlb->pop_response();
             }

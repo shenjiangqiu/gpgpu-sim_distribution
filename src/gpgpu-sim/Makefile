@@ -34,7 +34,7 @@ TRACE?=0
 ifeq ($(DEBUG),1)
 	CXXFLAGS = -Wall -DDEBUG
 else
-	CXXFLAGS = -Wall
+	CXXFLAGS = -Wall -DNDEBUG
 endif
 
 ifeq ($(TRACE),1)
@@ -50,7 +50,7 @@ endif
 ifneq ($(DEBUG),1)
 	OPTFLAGS += -O3 -ggdb  
 else
-	CXXFLAGS += -ggdb
+	CXXFLAGS += 
 endif
 
 POWER_FLAGS=

@@ -10,6 +10,8 @@
 #include <utility>
 #include <memory>
 #include <unordered_set>
+extern std::set<addr_type> global_block_addr;
+
 template <typename Iter>
 Iter find_entry_to_fill(Iter start, Iter end)
 {
@@ -64,7 +66,7 @@ public:
     unsigned response_queue_size;
     unsigned miss_queue_size;
     bool allocate_on_fill;
-    shader_core_config* m_shader_config;
+    shader_core_config *m_shader_config;
 };
 
 enum class tlb_result
@@ -85,7 +87,7 @@ public:
     {
         for (unsigned i = 0; i < m_config.n_sets * m_config.n_associate; i++)
         {
-            assert(m_tag_arrays[i]->get_status(mem_access_sector_mask_t()) != RESERVED);
+            //(m_tag_arrays[i]->get_status(mem_access_sector_mask_t()) != RESERVED);
             m_tag_arrays[i]->set_status(INVALID, mem_access_sector_mask_t());
         }
     }
@@ -116,11 +118,15 @@ public:
     void cycle();
     bool is_outgoing(mem_fetch *mf);
     void del_outgoing(mem_fetch *mf);
-    void fill(mem_fetch *mf, unsigned long long time){
-        if(m_config.allocate_on_fill){
-            fill_allocate_on_fill(mf,time);
-        }else{
-            fill_allocate_on_miss(mf,time);
+    void fill(mem_fetch *mf, unsigned long long time)
+    {
+        if (m_config.allocate_on_fill)
+        {
+            fill_allocate_on_fill(mf, time);
+        }
+        else
+        {
+            fill_allocate_on_miss(mf, time);
         }
     }
     void fill_allocate_on_miss(mem_fetch *mf, unsigned long long time);
@@ -130,13 +136,16 @@ public:
     void print_stat(FILE *file) const
     {
 
-        fprintf(file, "%s  access: %llu\n", name.c_str(), access_times);
+        fprintf(file, "\n%s  access: %llu\n", name.c_str(), access_times);
         fprintf(file, "%s  hit: %llu\n", name.c_str(), hit_times);
+        fprintf(file, "%s  hit_reserve: %llu\n", name.c_str(), hit_reserved_times);
         fprintf(file, "%s  miss: %llu\n", name.c_str(), miss_times);
         fprintf(file, "%s  resfail_all_res: %llu\n", name.c_str(), resfail_all_res_times);
         fprintf(file, "%s  resfail_entry_full: %llu\n", name.c_str(), resfail_mshr_entry_full_times);
         fprintf(file, "%s  resfail_merge: %llu\n", name.c_str(), resfail_mshr_merge_full_times);
         fprintf(file, "%s  resfail_missq: %llu\n", name.c_str(), resfail_mshr_missq_full_times);
+        fprintf(file, "%s  foot_print_size_tlb: %lu\n", name.c_str(), block_addr_set.size());
+        fprintf(file, "%s  foot_print_size_tlb_global: %lu\n\n", name.c_str(), global_block_addr.size());
     }
 
 protected:

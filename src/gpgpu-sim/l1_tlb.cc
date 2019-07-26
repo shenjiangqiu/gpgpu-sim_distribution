@@ -6,7 +6,7 @@
 #include "shader.h"
 extern unsigned long long gpu_sim_cycle;
 extern unsigned long long gpu_tot_sim_cycle;
-
+std::set<addr_type> global_block_addr;
 #include "debug_macro.h"
 l1_tlb::l1_tlb(l1_tlb_config &config, page_manager *tlb_page_manager, const std::string &name) : m_config(config),
                                                                                                  m_page_manager(tlb_page_manager),
@@ -28,7 +28,7 @@ void l1_tlb_config::init()
 {
     //for test
     //assert(false);
-    assert(m_page_size > 0);
+    //assert(m_page_size > 0);
     if (m_page_size == 4096)
         m_page_size_log2 = 12;
     else
@@ -60,12 +60,12 @@ bool l1_tlb::reponse_empty()
 
 void l1_tlb::pop_response()
 {
-    assert(!m_response_queue.empty() && "the m_response_queue can't be empty");
+    //assert(!m_response_queue.empty() && "the m_response_queue can't be empty");
     m_response_queue.pop_front();
 }
 mem_fetch *l1_tlb::get_top_response()
 {
-    assert(!m_response_queue.empty() && "the m_response_queue can't be empty");
+    //assert(!m_response_queue.empty() && "the m_response_queue can't be empty");
     return m_response_queue.front();
 }
 
@@ -275,6 +275,7 @@ tlb_result l1_tlb::access_alloc_on_fill(mem_fetch *mf, unsigned long long time)
                 m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
                 hit_times++;
                 //(*start)->set_last_access_time(time, mask);
+
                 return tlb_result::hit;
             }
         }
@@ -292,6 +293,7 @@ tlb_result l1_tlb::access_alloc_on_fill(mem_fetch *mf, unsigned long long time)
                     (*start)->set_last_access_time(time, mask);
                     /*  if (block_addr == 802824 && mf->get_tpc() == 2)
                         printf("hit!\n"); */
+
                     return tlb_result::hit;
                     break;
                 }
@@ -305,11 +307,13 @@ tlb_result l1_tlb::access_alloc_on_fill(mem_fetch *mf, unsigned long long time)
         {
             printdbg_tlb("miss and mshr fail: mf:%llX\n", mf->get_virtual_addr());
             reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+
             return tlb_result::resfail;
         }
         if ((m_config.miss_queue_size > 0 && m_miss_queue.size() >= m_config.miss_queue_size))
         {
             resfail_mshr_missq_full_times++;
+
             return tlb_result::resfail;
         }
         //auto next_line = has_free_line ? free_line : last_line;
@@ -333,6 +337,7 @@ tlb_result l1_tlb::access_alloc_on_fill(mem_fetch *mf, unsigned long long time)
             mf->finished_tlb = true;
         }
         miss_times++;
+
         return tlb_result::miss;
     }
 }
@@ -401,14 +406,14 @@ void l1_tlb::fill_allocate_on_miss(mem_fetch *mf, unsigned long long time)
     auto done = false;
 
     block_addr_set.insert(block_addr);
-
+    global_block_addr.insert(block_addr);
     for (; start < end; start++)
     {
         if (!(*start)->is_invalid_line())
         {
             if ((*start)->m_tag == tag)
             {
-                assert((*start)->get_status(mask) == RESERVED);
+                //assert((*start)->get_status(mask) == RESERVED);
                 (*start)->fill(time, mask);
                 done = true;
                 break;
@@ -416,7 +421,7 @@ void l1_tlb::fill_allocate_on_miss(mem_fetch *mf, unsigned long long time)
         }
     }
 
-    assert(done && "fill must succeed");
+    //assert(done && "fill must succeed");
     //throw std::runtime_error("can't be here");
 }
 
@@ -447,7 +452,7 @@ void l1_tlb::fill_allocate_on_fill(mem_fetch *mf, unsigned long long time)
 
     (*fill_entry)->fill(time, mask);
     block_addr_set.insert(block_addr);
-
+    global_block_addr.insert(block_addr);
     //(*fill_entry)->set_last_access_time(time,mem_access_sector_mask_t());//otherwise the  access time will be 0!
 }
 unsigned int l1_tlb::outgoing_size()
