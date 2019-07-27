@@ -82,8 +82,8 @@ void page_table_walker_config::reg_option(option_parser_t opp)
     option_parser_register(opp, "-page_table_walker_concurrent_size", option_dtype::OPT_UINT32, &walker_size, "the walker_size", "8");
     option_parser_register(opp, "-page_table_walker_cache_size", option_dtype::OPT_UINT32, &cache_size, "the cache_size", "64");
     option_parser_register(opp, "-page_table_walker_cache_assoc", option_dtype::OPT_UINT32, &cache_assoc, "the cache_assoc", "16");
-    option_parser_register(opp, "-page_table_walker_mshr_size", option_dtype::OPT_UINT32, &mshr_size, "mshr_size", "16");
-    option_parser_register(opp, "-page_table_walker_mshr_max_merge", option_dtype::OPT_UINT32, &mshr_max_merge, "mshr_max_merge", "8");
+    option_parser_register(opp, "-page_table_walker_mshr_size", option_dtype::OPT_UINT32, &mshr_size, "mshr_size", "256");
+    option_parser_register(opp, "-page_table_walker_mshr_max_merge", option_dtype::OPT_UINT32, &mshr_max_merge, "mshr_max_merge", "256");
     option_parser_register(opp, "-page_table_walker_range_cache_size", option_dtype::OPT_UINT32, &m_range_size, "range size", "32");
     option_parser_register(opp, "-page_table_walker_enable_neighbor", option_dtype::OPT_BOOL, &enable_neighborhood, "neighborhood switch", "1");
     option_parser_register(opp, "-page_table_walker_enable_range", option_dtype::OPT_BOOL, &enable_range_pt, "range switch", "1");
@@ -232,6 +232,7 @@ void real_page_table_walker::cycle()
 
             //assert(working_walker.find(std::get<1>(mf)) == working_walker.end());
             working_walker[std::get<1>(mf)] = std::make_tuple(std::get<3>(mf), new_mf, false);
+            //printdbg("access new working worker")
             ready_to_send.push(std::get<1>(mf));
             assert(ready_to_send.size() < 10);
             //neigber hood, to check all the flags;
@@ -675,7 +676,7 @@ mem_fetch *real_page_table_walker::recv_probe() const
     auto mf = response_queue.front();
     return mf;
 }
-
+template <int lru_type>
 void real_page_table_walker::fill_allocate_on_miss(mem_fetch *mf)
 {
     auto addr = mf->get_physic_addr();
@@ -693,22 +694,46 @@ void real_page_table_walker::fill_allocate_on_miss(mem_fetch *mf)
     auto end = start + n_assoc;
     auto mask = mf->get_access_sector_mask();
     auto done = false;
-    for (; start < end; start++)
+    auto time = gpu_sim_cycle + gpu_tot_sim_cycle;
+    if (lru_type == 1)
     {
-        if (!(*start)->is_invalid_line())
+        for (; start < end; start++)
         {
-            if ((*start)->m_tag == tag)
+            if (!(*start)->is_invalid_line())
             {
-                assert((*start)->get_status(mask) == RESERVED);
-                (*start)->fill(gpu_sim_cycle + gpu_tot_sim_cycle, mask);
-                done = true;
-                break;
+                if ((*start)->m_tag == tag)
+                {
+                    assert((*start)->get_status(mask) == RESERVED);
+                    (*start)->fill(gpu_sim_cycle + gpu_tot_sim_cycle, mask);
+                    done = true;
+                    break;
+                }
             }
         }
+        assert(done);
+        return;
     }
-    assert(done);
-    return;
+    else
+    {
+        //lru type==2
+        //printdbg("\nfill, type2,blockaddr:%llx\n",block_addr);
+        auto &set = new_tag_arrays[set_index];
+        for (auto bg = set.begin(); bg != set.end(); bg++)
+        {
+            if ((*bg)->m_tag == tag)
+            {
+                assert((*bg)->get_status(mask) == RESERVED);
+                (*bg)->fill(time, mask);
+                auto tmp = *bg;
+                //set.erase(bg);
+                //set.push_front(tmp);
+                return;
+            }
+        }
+        assert(false); //can't reach there!!
+    }
 }
+template <int lru_type>
 void real_page_table_walker::fill_allocate_on_fill(mem_fetch *mf)
 {
     auto addr = mf->get_physic_addr();
@@ -725,10 +750,48 @@ void real_page_table_walker::fill_allocate_on_fill(mem_fetch *mf)
     auto start = m_tag_arrays.begin() + set_index * n_assoc;
     auto end = start + n_assoc;
     auto mask = mf->get_access_sector_mask();
+    auto time = gpu_sim_cycle + gpu_tot_sim_cycle;
+    if (lru_type == 1)
+    {
+        auto fill_entry = find_entry_to_fill(start, end);
+        (*fill_entry)->allocate(tag, block_addr, gpu_sim_cycle + gpu_tot_sim_cycle, mask);
 
-    auto fill_entry = find_entry_to_fill(start, end);
-    (*fill_entry)->allocate(tag, block_addr, gpu_sim_cycle + gpu_tot_sim_cycle, mask);
+        (*fill_entry)->fill(gpu_sim_cycle + gpu_tot_sim_cycle, mask);
+    }
+    else
+    {
 
-    (*fill_entry)->fill(gpu_sim_cycle + gpu_tot_sim_cycle, mask);
+        //test;
+        auto &set = new_tag_arrays[set_index];
+        for (auto bg = set.begin(); bg != set.end(); bg++)
+        {
+            if ((*bg)->m_tag == tag)
+            {
+                //ok we find the entry!igore!
+                //I think code won't run to here,
+                assert(false); //for test, remember to disable  this check!!
+            }
+        }
+        //miss
+
+        auto ilevel = mf->trans_important_level;
+        unsigned insert_position = ilevel == 1 ? m_config.i1_position : ilevel == 2 ? m_config.i2_position : m_config.i3_position;
+        auto new_block = new line_cache_block();
+        new_block->allocate(tag, block_addr, time, mem_access_sector_mask_t());
+        new_block->fill(time, mem_access_sector_mask_t());
+        if (set.size() < insert_position) //"1,1 no!,10,10,no,9,10,yes!"
+            set.push_back(new_block);
+        else
+        {
+            auto pos = std::next(set.begin(), insert_position - 1); //pos=1,add at begin!
+            set.insert(pos, new_block);
+            if (set.size() > m_config.cache_assoc)
+            {
+                delete set.back();
+                set.pop_back();
+                return;
+            }
+        }
+    }
     //(*fill_entry)->set_last_access_time(time,mem_access_sector_mask_t());//otherwise the  access time will be 0!
 }

@@ -133,44 +133,80 @@ public:
         auto mask = child_mf->get_access_sector_mask();
         // bool all_reserved = true;
         auto start = m_tag_arrays.begin() + n_assoc * set_index;
-                auto end = start + n_assoc;
-        for (; start < end; start++)
+        auto end = start + n_assoc;
+        if (lru_type == 1)
         {
-            if (!(*start)->is_invalid_line())
+            for (; start < end; start++)
             {
-                if ((*start)->m_tag == tag) //ok we find// this is what the identity entry/try to find that entry
+                if (!(*start)->is_invalid_line())
                 {
+                    if ((*start)->m_tag == tag) //ok we find// this is what the identity entry/try to find that entry
+                    {
 
-                    // all_reserved = false;
-                   
-                    //m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+                        // all_reserved = false;
 
-                    //assert(m_response_queue.size() < 100);
-                    (*start)->set_last_access_time(time, mask);
+                        //m_response_queue.push_front(mf); //only at this time ,we need push front, and we can pop front now.
+
+                        //assert(m_response_queue.size() < 100);
+                        (*start)->set_last_access_time(time, mask);
+                        hit_times++;
+                        return tlb_result::hit;
+                    }
+                }
+            }
+            // when run to here, means no hit line found,It's a miss;
+
+            unsigned reason;
+            if (m_mshr->full(block_addr, reason))
+            {
+                reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                return tlb_result::resfail;
+            }
+
+            //printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+            bool already_in_mshr = m_mshr->probe(block_addr);
+
+            m_mshr->add<1>(block_addr, child_mf);
+            if (!already_in_mshr)
+                miss_queue.push(child_mf);
+            // outgoing_mf.insert(mf);
+            //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
+            miss_times++;
+            return tlb_result::miss;
+        }
+        else //type2 and allocate on fill, we only need to check , don't evict anything
+        {
+            auto &set = new_tag_arrays[set_index];
+            for (auto bg = set.begin(); bg != set.end(); bg++)
+            {
+                if ((*bg)->m_tag == tag)
+                {
+                    (*bg)->set_last_access_time(time, mem_access_sector_mask_t());
+                    auto entry = *bg;
+                    set.erase(bg);
+                    set.push_front(entry);
                     hit_times++;
                     return tlb_result::hit;
                 }
             }
-        }
-        // when run to here, means no hit line found,It's a miss;
+            unsigned reason;
+            if (m_mshr->full(block_addr, reason))
+            {
+                reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                return tlb_result::resfail;
+            }
 
-        unsigned reason;
-        if (m_mshr->full(block_addr, reason))
-        {
-            reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
-            return tlb_result::resfail;
-        }
-        
-        //printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
-        bool already_in_mshr = m_mshr->probe(block_addr);
+            //printdbg_PW("the entry:1:tag:%llx,2:tag:%llx\n", m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2]->m_tag : 0, m_tag_arrays[61 * 2] ? m_tag_arrays[61 * 2 + 1]->m_tag : 0);
+            bool already_in_mshr = m_mshr->probe(block_addr);
 
-        m_mshr->add<1>(block_addr, child_mf);
-        if (!already_in_mshr)
-            miss_queue.push(child_mf);
-        // outgoing_mf.insert(mf);
-        //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
-        miss_times++;
-        return tlb_result::miss;
+            m_mshr->add<1>(block_addr, child_mf);
+            if (!already_in_mshr)
+                miss_queue.push(child_mf);
+            // outgoing_mf.insert(mf);
+            //printdbg_tlb("outgoing insert! size:%lu\n", outgoing_mf.size());
+            miss_times++;
+            return tlb_result::miss;
+        }
     }
 
     template <int lru_type>
@@ -201,9 +237,9 @@ public:
             auto mask = child_mf->get_access_sector_mask();
             bool all_reserved = true;
             bool has_free_line = false;
+            access_times++;
             if (lru_type == 1)
             {
-                access_times++;
                 auto start = m_tag_arrays.begin() + n_assoc * set_index;
                 auto end = start + n_assoc;
                 //to find a place to access
@@ -318,36 +354,90 @@ public:
             }
             else
             { //lru_type==2
-                assert(0 && "cannot go to here now!");
-                access_times++;
-                auto &set_line = new_tag_arrays[set_index];
-                if (set_line.empty())
+                // assert(0 && "cannot go to here now!");
+                // access_times++;
+                //printdbg("\nnew lru enter!\n");
+                auto &set = new_tag_arrays[set_index];
+                for (auto bg = set.begin(); bg != set.end(); bg++)
                 {
-                    set_line.emplace_back(new line_cache_block());
-                    set_line.back()->allocate(tag, block_addr, time, mask);
-                    hit_times++;
-                    return tlb_result::hit;
-                }
-                //auto ilevel=
-                unsigned insert_position = ilevel == 1 ? m_config.i1_position : ilevel == 2 ? m_config.i2_position : m_config.i3_position;
-                if (set_line.size() < m_config.cache_assoc)
-                {
-                    if (set_line.size() < insert_position)
+                    if ((*bg)->m_tag == tag)
                     {
-                        set_line.emplace_back(new line_cache_block());
-                        set_line.back()->allocate(tag, block_addr, time, mask);
-                        return tlb_result::hit;
-                    }
-                    else
-                    {
-                        auto start = set_line.begin();
-                        auto position_dest = std::next(start, insert_position - 1);
-                        auto new_pos = set_line.insert(position_dest, new line_cache_block());
-                        (*new_pos)->allocate(tag, block_addr, time, mask);
+                        if ((*bg)->is_valid_line())
+                        {
+                            auto entry = *bg;
+                            set.erase(bg);
+                            set.push_front(entry);
+                            entry->set_last_access_time(time,mem_access_sector_mask_t());
+                            hit_times++;
+                            //printdbg("hit!mf:%llx\n,blockaddr:%llx\n",child_mf->get_physic_addr(),block_addr);
+                            return tlb_result::hit;
+                        }
+                        else
+                        { //it's reserved
+                            unsigned reason;
+                            if(m_mshr->full(block_addr,reason)){
+                                reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                                //printdbg("resfail!mf:%llx\n,blockaddr:%llx\n",child_mf->get_physic_addr(),block_addr);
 
-                        return tlb_result::hit;
+                                return tlb_result::resfail;
+                            }
+                            assert(((*bg)->is_reserved_line()));
+                            auto entry = *bg;
+                            set.erase(bg);
+                            set.push_front(entry);
+                            entry->set_last_access_time(time,mem_access_sector_mask_t());
+                            hit_reserved_times++;
+                            m_mshr->add<1>(block_addr,child_mf);
+                            //printdbg("hit reserved!mf:%llx\n,blockaddr:%llx\n",child_mf->get_physic_addr(),block_addr);
+
+                            return tlb_result::hit_reserved;
+                        }
                     }
                 }
+
+                //miss
+
+                unsigned reason;
+                if (m_mshr->full(block_addr, reason))
+                {
+                    reason == 1 ? resfail_mshr_merge_full_times++ : resfail_mshr_entry_full_times++;
+                            //printdbg("resfail!mf:%llx\n,blockaddr:%llx\n",child_mf->get_physic_addr(),block_addr);
+
+                    return tlb_result::resfail;
+                }
+
+
+                unsigned insert_position = ilevel == 1 ? m_config.i1_position : ilevel == 2 ? m_config.i2_position : m_config.i3_position;
+                auto new_line=new line_cache_block();
+                new_line->allocate(tag,block_addr,time,mem_access_sector_mask_t());
+                m_mshr->add(block_addr,child_mf);
+                miss_queue.push(child_mf);
+                if (set.size() < insert_position)
+                {
+                    set.push_back(new_line);
+                            //printdbg("miss and insert to last!mf:%llx\n,blockaddr:%llx\n",child_mf->get_physic_addr(),block_addr);
+
+                    //set.back()->allocate(tag, block_addr, time, mask);
+                    miss_times++;
+                    return tlb_result::miss;
+                }
+                else
+                {
+                    auto start = set.begin();
+                    auto position_dest = std::next(start, insert_position - 1);
+                    auto new_pos = set.insert(position_dest, new_line);
+                    //(*new_pos)->allocate(tag, block_addr, time, mask);
+
+                    miss_times++;
+                    if(set.size()>m_config.cache_assoc){
+                        delete set.back();
+                        set.pop_back();
+                    }
+                            //printdbg("miss and insert to position:%u,mf::%llx\n,blockaddr:%llx\n",insert_position, child_mf->get_physic_addr(),block_addr);
+
+                    return tlb_result::miss;
+                }
+
                 return tlb_result::miss;
             }
         }
@@ -396,11 +486,26 @@ public:
     }
 
 private:
-    void fill(mem_fetch *mf){
-        if(m_config.allocate_on_fill) fill_allocate_on_fill(mf);
-        else fill_allocate_on_miss(mf);
+    void fill(mem_fetch *mf)
+    {
+        if (m_config.using_new_lru)
+        {
+            if (m_config.allocate_on_fill)
+                fill_allocate_on_fill<2>(mf); //new
+            else
+                fill_allocate_on_miss<2>(mf); //new
+        }
+        else
+        {
+            if (m_config.allocate_on_fill)
+                fill_allocate_on_fill<1>(mf); //old
+            else
+                fill_allocate_on_miss<1>(mf); //old
+        }
     }
+    template <int lru_type>
     void fill_allocate_on_fill(mem_fetch *mf); //fill pw cache;
+    template <int lru_type>
     void fill_allocate_on_miss(mem_fetch *mf); //fill pw cache;
 
     page_table_walker_config m_config;
